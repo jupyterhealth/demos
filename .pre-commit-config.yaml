@@ -20,3 +20,8 @@ repos:
     hooks:
       - id: nbqa-ruff
         args: [--fix]
+  # strip output because these demo outputs aren't public
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
