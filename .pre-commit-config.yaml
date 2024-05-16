@@ -2,7 +2,7 @@ ci:
   autoupdate_schedule: monthly
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.2.0
+    rev: v4.6.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -16,7 +16,7 @@ repos:
           - mdformat-myst
           - mdformat-black
   - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.7.0
+    rev: 1.8.5
     hooks:
       - id: nbqa-ruff
         args: [--fix]
