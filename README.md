@@ -1,6 +1,8 @@
-# demos
+# JupyterHealth demos
 
-demo notebooks to be run on the JupyterHealth deployment.
+Demo notebooks to be run on the JupyterHealth deployment.
+These notebooks are for running on our demonstration deployment, and contain code specific to our deployment.
+They are publicly available for reference, but are not meant to be functional outside our own demo environment.
 
 Here are some [nbgitpuller](https://nbgitpuller.readthedocs.io/en/latest/link.html) links to run dashboards on the Hub:
 

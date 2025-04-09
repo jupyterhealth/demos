@@ -1,0 +1,34 @@
+# See docs at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  title: 'JupyterHealth Demo notebooks'
+  description: 'Notebooks for running live demos for JupyterHealth'
+  keywords: []
+  #authors: ['JupyterHealth Software Team']
+  github: https://github.com/jupyterhealth/demos
+  #jupyter:
+  #  lite: true
+  references:
+    jupyterhealth_client: https://jupyterhealth-client.readthedocs.io/en/latest
+  # See https://mystmd.org/guide/table-of-contents
+  toc:
+    - file: README.md
+    - file: dashboards/sample-charts.ipynb
+    - file: dashboards/researcher-view.ipynb
+    - file: dashboards/researcher-view-cgm.ipynb
+
+site:
+  template: book-theme
+  title: 'JupyterHealth Demos'
+  options:
+    logo: https://jupyterhealth.org/images/JupyterHealthLogoTransparentNoSpace.png
+  nav: []
+  actions:
+    - title: Project Jupyter
+      url: https://jupyter.org
+    - title: CommonHealth
+      url: https://www.commonhealth.org
+    - title: 2i2c
+      url: https://2i2c.org
+  domains:
+    - jupyterhealth.github.io
