@@ -16,6 +16,7 @@ project:
     - file: dashboards/sample-charts.ipynb
     - file: dashboards/researcher-view.ipynb
     - file: dashboards/researcher-view-cgm.ipynb
+    - file: dashboards/smart-on-fhir.ipynb
 
 site:
   template: book-theme
