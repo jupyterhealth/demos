@@ -21,3 +21,4 @@ Links for 'researcher view' (i.e. JupyterLab, not Voilà):
 SMART app launch:
 
 - [BP demo via SMART](https://app.medplum.com/Patient/01961612-dbdc-759b-b885-f55117556bb6/apps) (click "JHE BP Demo")
+- [CGM demo via SMART](https://app.medplum.com/Patient/019615e3-3c8a-7479-a8b7-823cee2cebfb/apps) (click "JHE CGM Demo")
