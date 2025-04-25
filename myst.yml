@@ -14,6 +14,7 @@ project:
   toc:
     - file: README.md
     - file: dashboards/sample-charts.ipynb
+    - file: dashboards/cgm-demo.ipynb
     - file: dashboards/researcher-view.ipynb
     - file: dashboards/researcher-view-cgm.ipynb
     - file: dashboards/smart-on-fhir.ipynb
