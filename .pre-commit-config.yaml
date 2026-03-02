@@ -9,7 +9,7 @@ repos:
       - id: check-json
       - id: check-yaml
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.22
+    rev: 1.0.0
     hooks:
       - id: mdformat
         additional_dependencies:
@@ -22,6 +22,6 @@ repos:
         args: [--fix]
   # strip output because these demo outputs aren't public
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.1
+    rev: 0.9.1
     hooks:
       - id: nbstripout
