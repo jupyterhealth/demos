@@ -8,17 +8,19 @@ Here are some [nbgitpuller](https://nbgitpuller.readthedocs.io/en/latest/link.ht
 
 - [sample charts (BP demo)](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fsample-charts.ipynb&branch=main)
 
-- [CGM Demo](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fcgm-demo.ipynb&branch=main)
+<!--  cgm demo not working right now
+  - [CGM Demo](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fcgm-demo.ipynb&branch=main)
+-->
 
 Clicking a link above should take you to the Hub, clone the repo, and show you the dashboard.
 
 Links for 'researcher view' (i.e. JupyterLab, not Voilà):
 
-- [researcher view](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=lab%2Ftree%2Fdemos%2Fdashboards%2Fsample-charts.ipynb&branch=main)
+- [researcher view for blood pressure](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=lab%2Ftree%2Fdemos%2Fdashboards%2Fresearcher-view.ipynb&branch=main)
 
-- [researcher view for cgm](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=lab%2Ftree%2Fdemos%2Fdashboards%2Fresearcher-view-cgm-demo.ipynb&branch=main)
+- [researcher view for cgm](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=lab%2Ftree%2Fdemos%2Fdashboards%2Fresearcher-view-cgm.ipynb&branch=main)
 
-SMART app launch:
+SMART app launch (requires medplum access):
 
 - [BP demo via SMART](https://app.medplum.com/Patient/01961612-dbdc-759b-b885-f55117556bb6/apps) (click "JHE BP Demo")
 - [CGM demo via SMART](https://app.medplum.com/Patient/019615e3-3c8a-7479-a8b7-823cee2cebfb/apps) (click "JHE CGM Demo")
