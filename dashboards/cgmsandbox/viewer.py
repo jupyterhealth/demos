@@ -289,14 +289,31 @@ class CGMViewer:
 
     # --- Helper ---
     def iter_axes_by_time(self):
-        if hasattr(self, "axes") and isinstance(self.axes, (list, tuple)):
-            for i, ax in enumerate(self.axes):
-                start = self.view_start + timedelta(days=7 * i)
-                end = start + timedelta(days=7)
-                yield ax, start, end
-        elif self.ax_cgm is not None:
-            yield self.ax_cgm, self.view_start, self.view_end
+        """Yield ``(ax, start, end)`` for every visible glucose time axis.
 
+        Overlays walk this rather than reaching into ``self.axes`` directly, because
+        the axis-to-window mapping differs by view, and because a daily render also
+        holds extension panels that an overlay has no business drawing on.
+
+        - daily: one axis spanning ``view_start`` to ``view_end``, a single day.
+          Extension panels share that window and are deliberately not yielded.
+        - full: one axis per week, laid out consecutively from ``view_start``.
+
+        The daily branch comes first on purpose. A one-panel render wraps its single
+        axis in a list, so testing for a list alone reads a one-day view as a
+        one-week one and hands every overlay a window seven times too wide.
+        """
+        if getattr(self, "view_mode", "daily") == "daily":
+            if self.ax_cgm is not None:
+                yield self.ax_cgm, self.view_start, self.view_end
+            return
+        if self.axes is None:
+            if self.ax_cgm is not None:
+                yield self.ax_cgm, self.view_start, self.view_end
+            return
+        for i, ax in enumerate(self.axes):
+            start = self.view_start + timedelta(days=7 * i)
+            yield ax, start, start + timedelta(days=7)
 
     def scale(self, daily_value, full_value):
         return daily_value if self.view_mode == "daily" else full_value
