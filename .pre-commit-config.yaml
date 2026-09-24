@@ -2,26 +2,26 @@ ci:
   autoupdate_schedule: monthly
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-json
       - id: check-yaml
   - repo: https://github.com/executablebooks/mdformat
-    rev: 1.0.0
+    rev: 82912cdaea4fb830f751504486a7879c70526547  # frozen: 1.0.0
     hooks:
       - id: mdformat
         additional_dependencies:
           - mdformat-myst
           - mdformat-black
   - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.9.1
+    rev: d31b7eae1767c43460afb3ba130e0a6602933abe  # frozen: 1.9.1
     hooks:
       - id: nbqa-ruff
         args: [--fix]
   # strip output because these demo outputs aren't public
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.9.1
+    rev: 34071b78c181af3bf5af955c1426466e096fc3db  # frozen: 0.9.1
     hooks:
       - id: nbstripout
