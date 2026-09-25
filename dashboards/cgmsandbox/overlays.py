@@ -590,6 +590,10 @@ class WakeupGlucoseOverlay:
         Preloaded sleep dataframe for `source='client'`.
     min_sleep_hours : float, default 8.0
         Minimum sleep duration (hours) to qualify for a wake-up event.
+    nights : pandas.DataFrame or None, default None
+        Output of :func:`~cgmsandbox.loader.load_sleep_nights`. Use this instead of
+        ``source`` when the study records aggregate nightly sleep with no stage
+        episodes, in which case ``load_sleep_data`` has nothing to read.
 
     Notes
     -----
@@ -602,22 +606,28 @@ class WakeupGlucoseOverlay:
                  subject_id: int | None = None,
                  filename: str | None = None,
                  client_df: Optional[pd.DataFrame] = None,
-                 min_sleep_hours=8.0):
+                 min_sleep_hours=8.0,
+                 nights: Optional[pd.DataFrame] = None):
         self.source = source
         self.base_path = base_path
         self.filename = filename
         self.client_df = client_df
         self.min_sleep_hours = min_sleep_hours
-        self.filename = filename
+        self.nights = nights
 
     def draw(self):
         viewer = self.viewer
 
-        sleep_df = load_sleep_data(source=self.source,
-                           base_path=self.base_path,
-                           filename=self.filename,
-                           client_df=self.client_df
-                          )
+        if self.nights is not None:
+            # Aggregate per-night sleep: no stage episodes exist to load, so build
+            # the block shape the helper reads from the night windows instead.
+            sleep_df = _nights_as_episodes(self.nights)
+        else:
+            sleep_df = load_sleep_data(source=self.source,
+                               base_path=self.base_path,
+                               filename=self.filename,
+                               client_df=self.client_df
+                              )
 
         wg_df = extract_wakeup_glucose(viewer.df, sleep_df, min_sleep_hours=self.min_sleep_hours)
         if wg_df.empty:
@@ -771,3 +781,82 @@ class SleepWindowOverlay:
                         edgecolor=self.color if self.outline else "none",
                         linewidth=0.8 if self.outline else 0,
                     )
+
+
+def _nights_as_episodes(nights: pd.DataFrame) -> pd.DataFrame:
+    """Present aggregate per-night sleep in the episode shape the helpers want.
+
+    ``load_sleep_nights`` returns one row per night with ``sleep_start`` and
+    ``sleep_end``. Studies that record only aggregate durations have no stage
+    episodes, so the episode-consuming helpers cannot read them directly. One
+    night is one block of sleep, which is all ``extract_wakeup_glucose`` needs to
+    find a wake time, so this maps each night onto a single ``asleep`` episode.
+    """
+    return pd.DataFrame({
+        "start": nights["sleep_start"],
+        "end": nights["sleep_end"],
+        "stage": "asleep",
+    }).sort_values("start").reset_index(drop=True)
+
+
+class MageJumpOverlay:
+    """Mark the glucose jumps that a consecutive-difference MAGE averages.
+
+    MAGE is reported as a single number: the mean of the absolute difference
+    between consecutive readings, counting only differences above a threshold.
+    That definition is easy to state and hard to picture, because nothing in the
+    number shows *which* jumps produced it. This overlay draws a segment across
+    every qualifying jump, so the values behind the mean are visible on the trace.
+
+    Jumps are measured on ``viewer.df``, the frame the viewer actually draws, so
+    every segment lands on two readings you can see. ``process_cgm`` trims the
+    first and last partial days and the first 24 hours, so the set here is a
+    subset of the one behind a MAGE computed over an untrimmed frame. The mean of
+    the marked segments is therefore close to, but not identical to, a value
+    computed before trimming.
+
+    See Also
+    --------
+    MageOverlay : the moving-average segment method, which resamples first and
+        shades counted segments instead of consecutive reading pairs.
+    mage_ma_segments : the segment detector behind :class:`MageOverlay`.
+
+    Parameters
+    ----------
+    threshold : float
+        Differences above this value count as excursions. Pass the same 1 SD
+        figure the notebook used when it computed MAGE.
+    color : str
+        Colour of the marked segments.
+    width : float
+        Segment linewidth in the daily view, scaled down for the full view.
+    """
+
+    def __init__(self, threshold: float, color: str = "#c0392b", width: float = 2.4):
+        self.threshold = threshold
+        self.color = color
+        self.width = width
+
+    def draw(self):
+        df = self.viewer.df
+        for ax, start, end in self.viewer.iter_axes_by_time():
+            window = df[(df["time"] >= start) & (df["time"] < end)].sort_values("time")
+            if len(window) < 2:
+                continue
+
+            g = pd.to_numeric(window["gl"], errors="coerce").reset_index(drop=True)
+            times = window["time"].reset_index(drop=True)
+            jump = g.diff().abs()
+
+            for i in jump.index[(jump > self.threshold).fillna(False)]:
+                if i == 0 or pd.isna(g[i]) or pd.isna(g[i - 1]):
+                    continue
+                ax.plot(
+                    [times[i - 1], times[i]],
+                    [g[i - 1], g[i]],
+                    color=self.color,
+                    lw=self.viewer.scale(self.width, self.width * 0.7),
+                    solid_capstyle="round",
+                    alpha=0.85,
+                    zorder=4,
+                )
