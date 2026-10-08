@@ -13,6 +13,7 @@ project:
   # See https://mystmd.org/guide/table-of-contents
   toc:
     - file: README.md
+    - file: tutorials/getting-started-blood-pressure.ipynb
     - file: dashboards/sample-charts.ipynb
     - file: dashboards/cgm-demo.ipynb
     - file: dashboards/researcher-view.ipynb
