@@ -9,19 +9,19 @@ repos:
       - id: check-json
       - id: check-yaml
   - repo: https://github.com/executablebooks/mdformat
-    rev: 82912cdaea4fb830f751504486a7879c70526547  # frozen: 1.0.0
+    rev: 2d496dbc18e31b83a1596685347ffe0b6041daf0  # frozen: 1.0.0
     hooks:
       - id: mdformat
         additional_dependencies:
           - mdformat-myst
           - mdformat-black
   - repo: https://github.com/nbQA-dev/nbQA
-    rev: d31b7eae1767c43460afb3ba130e0a6602933abe  # frozen: 1.9.1
+    rev: f96ec7f3b26a32619435686eb5813235f7e3327e  # frozen: 1.9.1
     hooks:
       - id: nbqa-ruff
         args: [--fix]
   # strip output because these demo outputs aren't public
   - repo: https://github.com/kynan/nbstripout
-    rev: 34071b78c181af3bf5af955c1426466e096fc3db  # frozen: 0.9.1
+    rev: f5da19ce3b7b40e97c12ee9cd8ce97f48f97ddf7  # frozen: 0.9.1
     hooks:
       - id: nbstripout
