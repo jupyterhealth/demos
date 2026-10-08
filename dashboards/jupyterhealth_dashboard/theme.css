@@ -1,0 +1,391 @@
+:root {
+  --jh-navy: #012169;
+  --jh-blue: #00539b;
+  --jh-pale: #edf5fb;
+  --jh-ink: #111318;
+  --jh-muted: #4b5664;
+  --jh-line: #d9e0e7;
+  --jh-wash: #f6f8fa;
+  --jh-white: #ffffff;
+  --jh-head-bar: #e8edf2;
+  --jh-target: #edf5eb;
+  --jh-very-low: #8f1d21;
+  --jh-low: #d84b3f;
+  --jh-band-target: #3f9b57;
+  --jh-high: #e9a417;
+  --jh-very-high: #d2681c;
+  --jh-focus: #0066b3;
+  --jh-divider: #66717e;
+  --jh-page: 1440px;
+}
+
+html, body {
+  background: var(--jh-white);
+  color: var(--jh-ink);
+}
+
+/* ---------- page scrolling ---------- */
+
+/* The dashboard is one tall page: let it scroll normally, with no nested scroller clipping the
+   widget tree or the figures inside it. */
+html, body { height: auto !important; min-height: 100%; }
+
+.jh-root,
+.widget-area,
+.widget-subarea,
+.jupyter-widgets,
+.widget-output,
+.widget-box,
+.jp-OutputArea,
+.jp-OutputArea-output,
+.jp-Cell-outputWrapper,
+.jp-Cell-outputArea {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.jh-root,
+.widget-box {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--jh-ink);
+}
+
+.sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* ---------- patient header ---------- */
+
+.jh-patient {
+  align-items: center;
+  background: var(--jh-white);
+  display: flex;
+  gap: 14px;
+  min-height: 92px;
+  padding: 10px 0;
+}
+
+.jh-avatar {
+  align-items: center;
+  background: #dce9f5;
+  border: 1px solid #b8cbde;
+  border-radius: 50%;
+  color: var(--jh-navy);
+  display: flex;
+  flex: 0 0 48px;
+  font-size: 15px;
+  font-weight: 750;
+  height: 48px;
+  justify-content: center;
+  letter-spacing: .04em;
+  width: 48px;
+}
+
+.jh-patient-name {
+  font-size: 25px;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.jh-facts {
+  color: #404a57;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 7px;
+}
+
+.jh-fact { white-space: nowrap; }
+
+/* ---------- sections ---------- */
+
+.jh-section {
+  border-top: 1px solid var(--jh-divider);
+  margin-top: 26px;
+  padding-top: 15px;
+}
+
+.jh-section:first-child { margin-top: 0; }
+
+.jh-section-head {
+  align-items: flex-end;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 13px;
+}
+
+.jh-h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  margin: 0;
+}
+
+/* ---------- labs and vitals (explicit previous -> current comparison) ---------- */
+
+.jh-lab-grid {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.jh-lab-card {
+  border: 1px solid var(--jh-line);
+  min-height: 132px;
+  padding: 12px;
+}
+
+.jh-lab-card h3 {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.jh-compare {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jh-compare-prev,
+.jh-compare-now {
+  color: var(--jh-navy);
+  display: flex;
+  flex-direction: column;
+  font-size: 18px;
+  font-weight: 720;
+  line-height: 1.15;
+}
+
+.jh-compare-prev { color: #6b7686; font-weight: 600; }
+
+.jh-compare-prev i,
+.jh-compare-now i {
+  color: var(--jh-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.jh-compare-arrow { color: #97a3b1; font-size: 16px; }
+
+.jh-lab-delta { margin-top: 9px; }
+
+.jh-delta {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.jh-delta-down { color: #1f7a45; }
+.jh-delta-up { color: #a5551a; }
+.jh-delta-flat { color: var(--jh-muted); }
+
+.jh-stable { color: var(--jh-muted); font-size: 12px; }
+
+/* ---------- AGP report block ---------- */
+
+.jh-agp-report {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  margin-bottom: 16px;
+}
+
+.jh-agp-block {
+  border: 1px solid var(--jh-line);
+}
+
+.jh-agp-head {
+  background: var(--jh-head-bar);
+  border-bottom: 1px solid var(--jh-line);
+  color: #2c3644;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 8px 12px;
+}
+
+.jh-agp-head-wide { margin-bottom: 0; }
+
+.jh-agp-range-body {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 84px minmax(0, 1fr);
+  padding: 14px 12px 8px;
+}
+
+.jh-agp-strip {
+  border: 1px solid #263849;
+  display: flex;
+  flex-direction: column;
+  height: 240px;
+  overflow: hidden;
+  width: 84px;
+}
+
+.jh-agp-seg {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 6px;
+}
+
+.jh-agp-seg span { color: #fff; font-size: 12px; font-weight: 750; }
+
+.jh-band-very_high { background: var(--jh-very-high); }
+.jh-band-high { background: var(--jh-high); }
+.jh-band-target { background: var(--jh-band-target); }
+.jh-band-low { background: var(--jh-low); }
+.jh-band-very_low { background: var(--jh-very-low); }
+
+.jh-agp-range-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.jh-agp-range-row {
+  align-items: baseline;
+  display: grid;
+  font-size: 12px;
+  gap: 8px;
+  grid-template-columns: 12px minmax(56px, auto) minmax(88px, auto) auto;
+}
+
+.jh-agp-range-row i {
+  border: 1px solid #777;
+  height: 10px;
+  width: 10px;
+}
+
+.jh-agp-range-row b { font-size: 13px; }
+.jh-bounds { color: var(--jh-muted); }
+.jh-goal { color: var(--jh-muted); font-size: 11px; }
+
+.jh-agp-range-row .jh-pct {
+  color: var(--jh-navy);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  grid-column: 2 / -1;
+  text-align: right;
+}
+
+.jh-goal-note {
+  color: var(--jh-muted);
+  font-size: 11px;
+  margin: 6px 12px 12px;
+}
+
+.jh-agp-context {
+  border-bottom: 1px solid var(--jh-line);
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.jh-agp-context div {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.jh-agp-context span { color: var(--jh-muted); font-size: 12px; }
+.jh-agp-context b { color: var(--jh-ink); font-size: 13px; }
+
+.jh-glucose-metric {
+  align-items: baseline;
+  border-bottom: 1px solid var(--jh-line);
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+}
+
+.jh-glucose-metric:last-child { border-bottom: 0; }
+
+.jh-metric-label { color: #2c3644; font-size: 13px; font-weight: 700; }
+
+.jh-metric-value {
+  color: var(--jh-navy);
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 720;
+}
+
+.jh-metric-goal { color: var(--jh-muted); font-size: 11px; grid-column: 1 / -1; }
+
+/* ---------- explorer controls ---------- */
+
+.jh-note {
+  color: var(--jh-muted);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+.jh-reset {
+  background: var(--jh-white) !important;
+  border: 1px solid #aebdcd !important;
+  border-radius: 5px !important;
+  color: var(--jh-ink) !important;
+  min-height: 40px !important;
+  padding: 8px 13px !important;
+}
+
+.jh-reset:hover { background: var(--jh-pale) !important; }
+
+/* non-scrolling two-option segmented control: both complete labels visible at once */
+.jh-segmented .widget-toggle-button,
+.jh-segmented .jupyter-button {
+  background: var(--jh-white);
+  border: 1px solid #aebdcd;
+  border-radius: 0;
+  color: var(--jh-ink);
+  font-weight: 650;
+  margin: 0 !important;
+  min-height: 44px;
+  padding: 9px 15px;
+  white-space: nowrap;
+}
+
+.jh-segmented .widget-toggle-button:first-child { border-radius: 5px 0 0 5px; }
+.jh-segmented .widget-toggle-button:last-child { border-radius: 0 5px 5px 0; }
+.jh-segmented .widget-toggle-button.mod-active,
+.jh-segmented .widget-toggle-button[aria-pressed="true"],
+.jh-segmented .jupyter-button.mod-active {
+  background: var(--jh-navy);
+  border-color: var(--jh-navy);
+  color: var(--jh-white);
+}
+
+/* ---------- figure chrome ---------- */
+
+.js-plotly-plot .plotly .modebar { background: transparent; }
+
+/* Hide any residual Voilà/Jupyter editor chrome around the served dashboard. */
+.voila-Header,
+.voila-toolbar,
+.jp-NotebookPanel-toolbar,
+.jp-Toolbar {
+  display: none !important;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1180px) {
+  .jh-lab-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .jh-agp-report { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; transition: none !important; }
+}
