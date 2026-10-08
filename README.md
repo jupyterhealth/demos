@@ -21,9 +21,7 @@ These open in Voilà, which shows the dashboard without the code:
 
 - [sample charts (BP demo)](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fsample-charts.ipynb&branch=main)
 
-<!--  cgm demo not working right now
   - [CGM Demo](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fcgm-demo.ipynb&branch=main)
--->
 
 ## Researcher views
 
