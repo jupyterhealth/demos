@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import timedelta
 from html import escape
 from importlib import resources
+from typing import Any, Callable, Optional
 
 import ipywidgets as widgets
 import plotly.graph_objects as go
@@ -347,7 +348,146 @@ def _ppgr_section(view: dict) -> widgets.VBox:
     )
 
 
-def build_dashboard(view: dict) -> widgets.VBox:
+def _chat_message(role: str, text: str) -> widgets.HTML:
+    return _html(
+        f'<div class="jh-chat-message jh-chat-{escape(role)}"><b>{escape(role.title())}</b>'
+        f'<p>{escape(text).replace(chr(10), "<br>")}</p></div>'
+    )
+
+
+def _chat_sidecar(
+    chat_handler: Callable[[str], Any],
+    root: widgets.VBox,
+    figures: list[go.FigureWidget],
+) -> widgets.VBox:
+    """Build a widget-only sidecar; the handler makes it straightforward to unit test."""
+    launcher = widgets.Button(description="Ask about this dashboard", icon="comment")
+    launcher.add_class("jh-chat-launcher")
+    close = widgets.Button(description="Close", icon="times", layout=widgets.Layout(width="auto"))
+    close.add_class("jh-chat-close")
+    send = widgets.Button(description="Send", icon="paper-plane", button_style="primary")
+    send.add_class("jh-chat-send")
+    question = widgets.Textarea(
+        placeholder="Ask about the displayed sessions, glucose metrics, or context cards…",
+        layout=widgets.Layout(width="100%", height="92px"),
+    )
+    question.add_class("jh-chat-question")
+    status = _html('<p class="jh-chat-status" role="status" aria-live="polite"></p>')
+    transcript = widgets.VBox([], layout=widgets.Layout(width="100%"))
+    transcript.add_class("jh-chat-transcript")
+    starters = widgets.VBox(
+        [
+            _html('<p class="jh-chat-starter-label">Try a focused question</p>'),
+            *[
+                widgets.Button(description=prompt, layout=widgets.Layout(width="100%"))
+                for prompt in (
+                    "Summarize the displayed glucose metrics.",
+                    "What changed between the displayed sessions?",
+                    "Which context cards are available?",
+                )
+            ],
+        ],
+        layout=widgets.Layout(width="100%"),
+    )
+    starters.add_class("jh-chat-starters")
+    evidence = widgets.Accordion(children=[_html("<p>No response evidence yet.</p>")])
+    evidence.set_title(0, "Evidence used")
+    evidence.selected_index = None
+    evidence.add_class("jh-chat-evidence")
+    panel = widgets.VBox(
+        [
+            widgets.HBox(
+                [_html('<div><h2 class="jh-chat-title">Alex K. dashboard assistant</h2><p class="jh-chat-scope">Displayed dashboard evidence only</p></div>'), close],
+                layout=widgets.Layout(width="100%", justify_content="space-between"),
+            ),
+            _html('<p class="jh-chat-safety">Descriptive support only — not diagnosis or treatment advice.</p>'),
+            transcript,
+            starters,
+            question,
+            widgets.HBox([send], layout=widgets.Layout(width="100%", justify_content="flex-end")),
+            status,
+            evidence,
+        ],
+        layout=widgets.Layout(display="none"),
+    )
+    panel.add_class("jh-chat-panel")
+
+    original_figure_layouts = [
+        (figure, figure.layout.width, figure.layout.autosize)
+        for figure in figures
+    ]
+
+    def open_panel(_: widgets.Button) -> None:
+        panel.layout.display = "flex"
+        launcher.layout.display = "none"
+        root.add_class("jh-chat-open")
+        for figure, _, _ in original_figure_layouts:
+            figure.update_layout(width=None, autosize=True)
+
+    def close_panel(_: widgets.Button) -> None:
+        panel.layout.display = "none"
+        launcher.layout.display = ""
+        root.remove_class("jh-chat-open")
+        for figure, width, autosize in original_figure_layouts:
+            figure.update_layout(width=width, autosize=autosize)
+        focus = getattr(launcher, "focus", None)
+        if callable(focus):
+            focus()
+
+    def submit(_: Optional[widgets.Button] = None, prompt: Optional[str] = None) -> None:
+        text = (prompt if prompt is not None else question.value).strip()
+        if not text:
+            status.value = '<p class="jh-chat-status" role="status">Enter a question to send.</p>'
+            return
+        starters.layout.display = "none"
+        send.disabled = True
+        question.disabled = True
+        for button in starters.children[1:]:
+            button.disabled = True
+        status.value = '<p class="jh-chat-status" role="status" aria-live="polite">Preparing response…</p>'
+        transcript.children = (*transcript.children, _chat_message("you", text))
+        try:
+            result = chat_handler(text)
+            transcript.children = (*transcript.children, _chat_message("assistant", result.answer))
+            evidence.children = [
+                _html(
+                    "<ul>"
+                    + "".join(f"<li>{escape(str(item))}</li>" for item in result.evidence)
+                    + "</ul>"
+                )
+            ]
+            evidence.set_title(0, "Evidence used")
+            evidence.selected_index = 0
+            status.value = (
+                '<p class="jh-chat-status" role="status">'
+                "Based on displayed dashboard data.</p>"
+            )
+            question.value = ""
+        except Exception as exc:  # Handler errors are deliberately rendered without sensitive detail.
+            retry = " You can retry this question." if getattr(exc, "retryable", False) else ""
+            message = (
+                str(exc)
+                if getattr(exc, "safe_for_display", False)
+                else "Chat could not complete this request."
+            )
+            transcript.children = (*transcript.children, _chat_message("assistant", f"{message}{retry}"))
+            status.value = '<p class="jh-chat-status" role="status">No response was completed.</p>'
+        finally:
+            send.disabled = False
+            question.disabled = False
+            for button in starters.children[1:]:
+                button.disabled = False
+
+    launcher.on_click(open_panel)
+    close.on_click(close_panel)
+    send.on_click(submit)
+    for button in starters.children[1:]:
+        button.add_class("jh-chat-starter")
+        button.on_click(lambda _, button=button: submit(prompt=button.description))
+    return widgets.VBox([launcher, panel], layout=FULL_WIDTH)
+
+
+def build_dashboard(view: dict, chat_handler: Optional[Callable[[str], Any]] = None) -> widgets.VBox:
     """Compose the clinician dashboard widget tree for Voilà or notebook output."""
     sessions = view["sessions"]
     explorers = {explorer["name"]: explorer for explorer in view["explorers"]}
@@ -455,7 +595,7 @@ def build_dashboard(view: dict) -> widgets.VBox:
     if view.get("ppgr_comparison"):
         sections.append(_ppgr_section(view["ppgr_comparison"]))
 
-    return widgets.VBox(
+    dashboard = widgets.VBox(
         sections,
         layout=widgets.Layout(
             width="100%",
@@ -464,3 +604,21 @@ def build_dashboard(view: dict) -> widgets.VBox:
             padding="0 28px 120px",
         ),
     )
+    dashboard.add_class("jh-root")
+    if chat_handler is not None:
+        def figure_widgets(widget: widgets.Widget) -> list[go.FigureWidget]:
+            found = [widget] if isinstance(widget, go.FigureWidget) else []
+            for child in getattr(widget, "children", ()):
+                found.extend(figure_widgets(child))
+            return found
+
+        all_figures = [*profile_by.values()]
+        for prepared in explorers_by_session.values():
+            all_figures.extend(prepared.values())
+        all_figures.extend(figure_widgets(dashboard))
+        unique_figures = list({id(figure): figure for figure in all_figures}.values())
+        dashboard.children = (
+            *dashboard.children,
+            _chat_sidecar(chat_handler, dashboard, unique_figures),
+        )
+    return dashboard
