@@ -23,6 +23,8 @@ These open in Voilà, which shows the dashboard without the code:
 
 - [CGM Demo](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fcgm-demo.ipynb&branch=main)
 
+- [CGM Demo (patient view)](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fcgm-demo.ipynb%3Fview%3Dpatient&branch=main)
+
 ## Researcher views
 
 These open in JupyterLab, so you can read and run the code:
