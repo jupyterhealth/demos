@@ -10,13 +10,20 @@ metric.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from html import escape
 from importlib import resources
 
 import ipywidgets as widgets
 import plotly.graph_objects as go
 
-from .figures import agp_profile_figure, explorer_figure, session_bounds
+from .figures import (
+    agp_profile_figure,
+    explorer_figure,
+    ppgr_comparison_figure,
+    ppgr_distribution_figure,
+    session_bounds,
+)
 
 FULL_WIDTH = widgets.Layout(width="100%")
 _DIVIDER = "1px solid #66717e"
@@ -44,8 +51,7 @@ def _html(markup: str) -> widgets.HTML:
 
 def _figure(figure: go.Figure) -> go.FigureWidget:
     widget = go.FigureWidget(figure)
-    widget.layout.width = None
-    widget.layout.autosize = True
+    widget._config = {"displayModeBar": False, "responsive": True}
     return widget
 
 
@@ -155,10 +161,13 @@ def _band_strip_html(session: dict) -> str:
     for key, label, bounds, goal in BAND_ROWS:
         band = by_key.get(key, {"percent": 0.0})
         percent = float(band["percent"])
+        # The strip is a geometric encoding: each segment must occupy its actual share.
+        # The adjacent rows retain exact values for segments too short to label legibly.
+        in_strip_label = f"<span>{percent:.0f}%</span>" if percent >= 8.0 else ""
         segments.append(
-            f'<div class="jh-agp-seg jh-band-{key}" style="flex-grow:{max(percent, 1.4):.3f}" '
+            f'<div class="jh-agp-seg jh-band-{key}" style="flex-grow:{percent:.3f}" '
             f'title="{escape(label)} {percent:.1f}%">'
-            f'<span>{percent:.0f}%</span></div>'
+            f"{in_strip_label}</div>"
         )
         rows.append(
             '<div class="jh-agp-range-row">'
@@ -232,26 +241,110 @@ def _agp_report_html(session: dict) -> str:
     )
 
 
-def _profile_panel(profile: go.FigureWidget) -> widgets.VBox:
-    return widgets.VBox(
-        [
-            _html('<div class="jh-agp-head jh-agp-head-wide">24-hour glucose profile</div>'),
-            profile,
-        ],
-        layout=FULL_WIDTH,
-    )
-
-
-def _segmented(options: list[tuple[str, str]], on_change) -> widgets.ToggleButtons:
-    control = widgets.ToggleButtons(
+def _session_dropdown(options: list[tuple[str, str]], on_change) -> widgets.Dropdown:
+    """A compact native session select; the report deliberately has no segmented switch."""
+    control = widgets.Dropdown(
         options=options,
         value=options[0][1],
-        layout=widgets.Layout(width="auto"),
-        style={"button_width": "auto"},
+        layout=widgets.Layout(width="285px"),
     )
-    control.add_class("jh-segmented")
+    control.add_class("jh-session-select")
     control.observe(lambda change: on_change(change["new"]), names="value")
     return control
+
+
+# --------------------------------------------------------------------------------------
+# postprandial response comparison: prepared view in, chart and summary out
+
+
+def _ppgr_row(label: str, earlier: str, later: str, change: str) -> str:
+    # ``data-label`` lets the phone layout pair each value with its column name once the
+    # header row is hidden. A count with no delta is marked so the stacked layout drops the
+    # dangling empty "Change" line instead of printing the label with no value. Each value is
+    # wrapped in an explicit ``jh-ppgr-value`` element so the phone grid has a real second
+    # column to constrain; a bare text node would be auto-placed into the label column and
+    # overflow the card.
+    change_class = "jh-ppgr-change" + ("" if change else " jh-ppgr-empty")
+
+    def value(text: str) -> str:
+        return f'<span class="jh-ppgr-value">{escape(text)}</span>'
+
+    return (
+        '<div class="jh-ppgr-row">'
+        f'<span class="jh-ppgr-metric">{escape(label)}</span>'
+        f'<span data-label="Earlier period">{value(earlier)}</span>'
+        f'<span data-label="Later period">{value(later)}</span>'
+        f'<span class="{change_class}" data-label="Change">{value(change)}</span>'
+        "</div>"
+    )
+
+
+def _ppgr_summary_html(view: dict) -> widgets.HTML:
+    comparison = view["comparison"]
+    sessions = {session["name"]: session for session in view["sessions"]}
+    base, follow = sessions["baseline"], sessions["follow_up"]
+    adherence = view["adherence"]
+    percent = comparison["mean_iauc_percent"]
+    change = (
+        f'{comparison["mean_iauc_delta"]:+,.0f} mg/dL·min'
+        + (f" ({percent:+.1f}%)" if percent is not None else "")
+    )
+    activity_change = round(
+        follow["mean_activity_first_30"] - base["mean_activity_first_30"], 1
+    )
+    rows = "".join(
+        [
+            _ppgr_row(
+                "Mean iAUC",
+                f'{base["mean_iauc"]:,.0f}',
+                f'{follow["mean_iauc"]:,.0f}',
+                change,
+            ),
+            _ppgr_row(
+                "Mean activity, first 30 min",
+                f'{base["mean_activity_first_30"]:.0f} steps/min',
+                f'{follow["mean_activity_first_30"]:.0f} steps/min',
+                f"{activity_change:+.0f} steps/min",
+            ),
+            _ppgr_row(
+                "Eligible meals",
+                f'{base["eligible_meals"]} of {base["total_meals"]}',
+                f'{follow["eligible_meals"]} of {follow["total_meals"]}',
+                "",
+            ),
+            _ppgr_row(
+                "Meals meeting the post-meal walk rule",
+                f'{adherence["baseline"]["walks"]} of {adherence["baseline"]["meals"]}',
+                f'{adherence["follow_up"]["walks"]} of {adherence["follow_up"]["meals"]}',
+                "",
+            ),
+        ]
+    )
+    head = (
+        '<div class="jh-ppgr-row jh-ppgr-head">'
+        '<span class="jh-ppgr-metric">Comparison summary</span>'
+        f'<span>{escape(base["label"])}</span><span>{escape(follow["label"])}</span><span>Change</span></div>'
+    )
+    return _html(
+        '<section class="jh-agp-block jh-ppgr-summary">'
+        f"{head}{rows}"
+        "</section>"
+    )
+
+
+def _ppgr_section(view: dict) -> widgets.VBox:
+    return _section(
+        _section_head("Postprandial response comparison"),
+        _figure(ppgr_comparison_figure(view)),
+        _ppgr_summary_html(view),
+        widgets.VBox(
+            [
+                _html('<div class="jh-agp-head jh-agp-head-wide">iAUC by meal</div>'),
+                _figure(ppgr_distribution_figure(view)),
+            ],
+            layout=FULL_WIDTH,
+        ),
+    )
 
 
 def build_dashboard(view: dict) -> widgets.VBox:
@@ -262,64 +355,108 @@ def build_dashboard(view: dict) -> widgets.VBox:
 
     metrics_by = {session["name"]: _agp_report_html(session) for session in sessions}
     profile_by = {session["name"]: _figure(agp_profile_figure(session)) for session in sessions}
-    profile_panels = {session["name"]: _profile_panel(profile_by[session["name"]])
-                      for session in sessions}
-    explorer_by = {name: _figure(explorer_figure(explorer))
-                   for name, explorer in explorers.items()}
-    bounds_by = {name: session_bounds(explorer) for name, explorer in explorers.items()}
 
+    # Voilà 0.5.x reliably renders a new FigureWidget supplied through a container,
+    # while live Plotly relayout messages are not dependable after initial render.
+    # Prepare every permitted range before a widget is wrapped or displayed, then the
+    # range controls only replace the holder's child.  ``session_bounds`` returns the
+    # notebook's local wall-clock datetimes, and ISO strings preserve those exact bounds.
+    explorers_by_session: dict[str, dict[str, go.FigureWidget]] = {}
+    explorer_tick_styles = {
+        "1": (6 * 60 * 60 * 1000, "%a %-d<br>%H:%M"),
+        "3": (12 * 60 * 60 * 1000, "%a %-d<br>%H:%M"),
+        "7": (24 * 60 * 60 * 1000, "%a %-d"),
+        "all": (7 * 24 * 60 * 60 * 1000, "%b %-d"),
+    }
+    for name, explorer in explorers.items():
+        start, end = session_bounds(explorer)
+        ranges = {"all": (start, end)}
+        if start is not None and end is not None:
+            ranges.update(
+                {str(days): (max(start, end - timedelta(days=days)), end) for days in (1, 3, 7)}
+            )
+        prepared = {}
+        for days, bounds in ranges.items():
+            figure = explorer_figure(explorer)
+            span_start, span_end = bounds
+            if span_start is not None and span_end is not None:
+                date_range = [span_start.isoformat(), span_end.isoformat()]
+                for axis in (figure.layout.xaxis, figure.layout.xaxis2, figure.layout.xaxis3):
+                    axis.range = date_range
+                    axis.dtick, axis.tickformat = explorer_tick_styles[days]
+            prepared[days] = _figure(figure)
+        explorers_by_session[name] = prepared
     report_widget = _html(metrics_by[initial])
-    profile_box = widgets.Box([profile_panels[initial]], layout=FULL_WIDTH)
-    explorer_box = widgets.Box([explorer_by[initial]], layout=FULL_WIDTH)
 
     reset_button = widgets.Button(
-        description="Reset to All",
+        description="Reset",
         layout=widgets.Layout(width="auto"),
     )
     reset_button.add_class("jh-reset")
 
-    def set_full_range(name: str) -> None:
-        bounds = bounds_by[name]
-        if not bounds or bounds[0] is None:
-            return
-        start, end = bounds
-        explorer = explorer_by[name]
-        for axis in ("xaxis", "xaxis2", "xaxis3"):
-            getattr(explorer.layout, axis).range = [start, end]
+    range_values = (("1", "1"), ("3", "3"), ("7", "7"), ("All", "all"))
+    range_buttons = {
+        days: widgets.Button(description=label, layout=widgets.Layout(width="auto"))
+        for label, days in range_values
+    }
+    for button in range_buttons.values():
+        button.add_class("jh-range-button")
+    range_controls = widgets.HBox(
+        [range_buttons[days] for _, days in range_values],
+        layout=widgets.Layout(display="flex", flex_flow="row nowrap", width="auto"),
+    )
+    range_controls.add_class("jh-range-controls")
+
+    def apply_range(days: str) -> None:
+        for value, button in range_buttons.items():
+            if value == days:
+                button.add_class("jh-range-active")
+            else:
+                button.remove_class("jh-range-active")
+        explorer_section.children = (
+            *explorer_section.children[:-1],
+            explorers_by_session[selector.value][days],
+        )
 
     def on_session_change(name: str) -> None:
         report_widget.value = metrics_by[name]
-        profile_box.children = (profile_panels[name],)
-        explorer_box.children = (explorer_by[name],)
-        set_full_range(name)
+        agp_section.children = (*agp_section.children[:-1], profile_by[name])
+        apply_range("all")
 
     def on_reset(_: widgets.Button) -> None:
-        set_full_range(selector.value)
+        apply_range("all")
 
-    selector = _segmented(
+    selector = _session_dropdown(
         [(session["label"], session["name"]) for session in sessions], on_session_change
     )
     reset_button.on_click(on_reset)
+    for days, button in range_buttons.items():
+        button.on_click(lambda _, days=days: apply_range(days))
+    agp_section = _section(
+        _section_head("Ambulatory glucose profile", selector),
+        report_widget,
+        _html('<div class="jh-agp-head jh-agp-head-wide">24-hour glucose profile</div>'),
+        profile_by[initial],
+    )
+    explorer_section = _section(
+        _section_head("Glucose explorer", widgets.HBox([range_controls, reset_button])),
+        _html('<p class="jh-note">Meals, activity and sleep share one time axis.</p>'),
+        explorers_by_session[initial]["all"],
+    )
+    apply_range("all")
+
+    sections = [
+        load_theme(),
+        _patient_header(view),
+        _context_section(view),
+        agp_section,
+        explorer_section,
+    ]
+    if view.get("ppgr_comparison"):
+        sections.append(_ppgr_section(view["ppgr_comparison"]))
 
     return widgets.VBox(
-        [
-            load_theme(),
-            _patient_header(view),
-            _context_section(view),
-            _section(
-                _section_head("Ambulatory glucose profile", selector),
-                report_widget,
-                profile_box,
-            ),
-            _section(
-                _section_head("Glucose explorer", reset_button),
-                _html(
-                    '<p class="jh-note">Presets 1 / 3 / 7 days or All · drag the overview slider '
-                    "to adjust the window · meals, activity and sleep share one time axis.</p>"
-                ),
-                explorer_box,
-            ),
-        ],
+        sections,
         layout=widgets.Layout(
             width="100%",
             max_width="1440px",

@@ -37,6 +37,14 @@ ACTIVITY_BLUE = "#617fa8"
 DEEP = "#2c5282"
 LIGHT = "#63a4d8"
 REM = "#8b5cf6"
+PPGR_BASELINE = "#6b7686"
+PPGR_FOLLOW = DUKE_NAVY
+PPGR_BASELINE_FILL = "rgba(107, 118, 134, 0.12)"
+PPGR_FOLLOW_FILL = "rgba(1, 33, 105, 0.12)"
+
+# 1440 px report maximum less 28 px horizontal padding; fixes Voilà FigureWidget's stale
+# 700 px first-paint raster at the approved 1600 px desktop demo viewport.
+DESKTOP_DEMO_CONTENT_WIDTH = 1384
 
 _SIX_HOURS_MS = 6 * 3600 * 1000
 _MAX_TRACE_GAP = timedelta(minutes=15)
@@ -124,7 +132,13 @@ def agp_profile_figure(session: dict, height: int = 430) -> go.Figure:
 
     figure.add_hline(y=180, line={"color": TARGET_LINE, "width": 1})
     figure.add_hline(y=70, line={"color": TARGET_LINE, "width": 1})
-    figure.update_layout(**_BASE_LAYOUT, height=height, showlegend=False)
+    figure.update_layout(
+        **_BASE_LAYOUT,
+        width=DESKTOP_DEMO_CONTENT_WIDTH,
+        height=height,
+        autosize=False,
+        showlegend=False,
+    )
     figure.update_layout(margin={"l": 48, "r": 42, "t": 18, "b": 40})
     figure.update_xaxes(
         range=[0, 1440],
@@ -133,12 +147,9 @@ def agp_profile_figure(session: dict, height: int = 430) -> go.Figure:
         gridcolor=GRID,
         title="",
     )
-    y_ticks = [54, 70, 180, 250, 350]
-    lower = min(min(p05), 54) if p05 else 40
-    upper = max(max(p95), 250) if p95 else 350
-    y_min = 0 if lower < 54 else 40
+    y_ticks = [40, 54, 70, 180, 250, 300]
     figure.update_yaxes(
-        range=[y_min, max(upper + 20, 360)],
+        range=[40, 300],
         tickvals=y_ticks,
         ticktext=[str(value) for value in y_ticks],
         gridcolor=GRID,
@@ -171,8 +182,8 @@ def _nearest_glucose(glucose: pd.DataFrame, moment: datetime) -> float:
     return float(glucose.loc[deltas.idxmin(), "mg_dl"])
 
 
-def explorer_figure(explorer: dict, height: int = 680) -> go.Figure:
-    """Glucose, meal, activity and sleep-stage rows sharing one local time domain."""
+def explorer_figure(explorer: dict, height: int = 760) -> go.Figure:
+    """Full-width timeline for one selected recording session."""
     figure = make_subplots(
         rows=3,
         cols=1,
@@ -183,22 +194,29 @@ def explorer_figure(explorer: dict, height: int = 680) -> go.Figure:
     )
 
     glucose = explorer["glucose"]
-    segments = _glucose_segments(glucose)
-    for index, segment in enumerate(segments):
-        figure.add_trace(
-            go.Scattergl(
-                x=[_wall_clock(value) for value in segment["recorded_at"]],
-                y=segment["mg_dl"],
-                mode="lines",
-                name="Glucose",
-                showlegend=index == 0,
-                legendgroup="glucose",
-                line={"color": DUKE_BLUE, "width": 1.4},
-                hovertemplate="%{x|%b %-d, %H:%M}<br>%{y:.0f} mg/dL<extra>Glucose</extra>",
-            ),
-            row=1,
-            col=1,
-        )
+    session_styles = {"baseline": ("Glucose", "#6b7686"), "follow_up": ("Glucose", DUKE_BLUE)}
+    if "session" not in glucose.columns:
+        glucose = glucose.assign(session=explorer.get("name", "baseline"))
+    for session_name, rows in glucose.groupby("session", sort=False):
+        label, color = session_styles.get(session_name, ("Glucose", DUKE_BLUE))
+        for index, segment in enumerate(_glucose_segments(rows)):
+            figure.add_trace(
+                go.Scatter(
+                    x=[_wall_clock(value) for value in segment["recorded_at"]],
+                    y=segment["mg_dl"],
+                    mode="lines",
+                    name=label,
+                    showlegend=index == 0,
+                    legendgroup=session_name,
+                    line={"color": color, "width": 1.5},
+                    hovertemplate=(
+                        "%{x|%b %-d, %H:%M}<br>%{y:.0f} mg/dL"
+                        f"<extra>{label}</extra>"
+                    ),
+                ),
+                row=1,
+                col=1,
+            )
     figure.add_hrect(
         y0=70, y1=180, fillcolor=TARGET_FILL, line_width=0, layer="below", row=1, col=1
     )
@@ -279,7 +297,9 @@ def explorer_figure(explorer: dict, height: int = 680) -> go.Figure:
 
     figure.update_layout(
         **_BASE_LAYOUT,
+        width=DESKTOP_DEMO_CONTENT_WIDTH,
         height=height,
+        autosize=False,
         barmode="overlay",
         legend={"orientation": "h", "yanchor": "top", "y": -0.16, "x": 0},
     )
@@ -289,21 +309,7 @@ def explorer_figure(explorer: dict, height: int = 680) -> go.Figure:
     figure.update_xaxes(dtick=_SIX_HOURS_MS, tickformat="%H:%M", gridcolor=GRID)
 
     figure.update_xaxes(
-        rangeslider={"visible": True, "thickness": 0.07},
-        rangeselector={
-            "buttons": [
-                {"count": 1, "label": "1 day", "step": "day", "stepmode": "backward"},
-                {"count": 3, "label": "3 days", "step": "day", "stepmode": "backward"},
-                {"count": 7, "label": "7 days", "step": "day", "stepmode": "backward"},
-                {"step": "all", "label": "All"},
-            ],
-            "x": 0,
-            "y": 1.02,
-            "xanchor": "left",
-            "yanchor": "bottom",
-            "activecolor": DUKE_NAVY,
-            "bgcolor": "#ffffff",
-        },
+        rangeslider={"visible": False},
         row=3,
         col=1,
     )
@@ -321,3 +327,183 @@ def session_bounds(explorer: dict) -> tuple[datetime | None, datetime | None]:
     start = min(_wall_clock(value) for value in glucose["recorded_at"])
     end = max(_wall_clock(value) for value in glucose["recorded_at"])
     return start, end
+
+
+def ppgr_comparison_figure(view: dict, height: int = 560) -> go.Figure:
+    """Baseline vs follow-up mean glucose change with the aligned activity row beneath it.
+
+    Only the prepared view is drawn: the notebook supplies the shared relative-minute axis,
+    each session's mean change and 25th/75th range, and the mean aligned steps per minute.
+    Every glucose value is already change from the meal's own pre-meal baseline.
+    """
+    minutes = view["x_minutes"]
+    figure = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.12,
+        row_heights=[0.66, 0.34],
+        subplot_titles=(
+            "Glucose change from pre-meal baseline · mg/dL",
+            "Aligned activity · steps / min",
+        ),
+    )
+    # Panel captions are Plotly annotations, so they neither wrap nor shrink on their own.
+    # On a 430 px phone the long glucose caption overruns the canvas and clips its trailing
+    # unit, so stack it onto two short lines at a caption size and reserve top margin for
+    # both lines. The activity caption already fits one line. No values or units change.
+    if len(figure.layout.annotations) >= 2:
+        figure.layout.annotations[0].text = "Glucose change from<br>pre-meal baseline · mg/dL"
+    for annotation in figure.layout.annotations:
+        annotation.font.size = 13
+    for session in view["sessions"]:
+        follow = session["name"] == "follow_up"
+        color = PPGR_FOLLOW if follow else PPGR_BASELINE
+        fill = PPGR_FOLLOW_FILL if follow else PPGR_BASELINE_FILL
+        label = session["label"]
+        # Rank baseline and follow-up as two blocks (10s then 20s) so the band, its mean, and its
+        # activity stay together and the horizontal legend wraps in a readable order on a phone.
+        legend_rank = 20 if follow else 10
+        # 25th-75th percentile band across the eligible meals, then the mean curve on top. The
+        # low edge carries the legend key: a filled Scatter swatch renders as a band using its
+        # fillcolor, so the ribbon is attributable from the legend alone.
+        figure.add_trace(
+            go.Scatter(
+                x=minutes,
+                y=session["glucose_high"],
+                mode="lines",
+                line={"width": 0},
+                hoverinfo="skip",
+                showlegend=False,
+                legendgroup=session["name"],
+                legendrank=legend_rank,
+            ),
+            row=1,
+            col=1,
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=minutes,
+                y=session["glucose_low"],
+                mode="lines",
+                fill="tonexty",
+                fillcolor=fill,
+                line={"width": 0},
+                hoverinfo="skip",
+                name=f"{label} 25th–75th percentile",
+                showlegend=True,
+                legendgroup=session["name"],
+                legendrank=legend_rank + 1,
+            ),
+            row=1,
+            col=1,
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=minutes,
+                y=session["glucose_mean"],
+                mode="lines",
+                name=f"{label} glucose",
+                line={"color": color, "width": 2.6},
+                legendgroup=session["name"],
+                legendrank=legend_rank + 2,
+                hovertemplate=(
+                    label + " glucose %{x:+d} min<br>%{y:+.0f} mg/dL<extra></extra>"
+                ),
+            ),
+            row=1,
+            col=1,
+        )
+    # Activity is drawn after the glucose block; legendrank slots each dashed activity trace
+    # directly after its session's band and mean, so the shared legend still reads baseline
+    # group then follow-up group. Both activity traces are dashed with no area fill, so the
+    # style itself separates activity from the solid glucose curves regardless of panel position.
+    for session in view["sessions"]:
+        follow = session["name"] == "follow_up"
+        color = PPGR_FOLLOW if follow else PPGR_BASELINE
+        label = session["label"]
+        legend_rank = 20 if follow else 10
+        figure.add_trace(
+            go.Scatter(
+                x=minutes,
+                y=session["activity_mean"],
+                mode="lines",
+                name=f"{label} activity",
+                line={"color": color, "width": 1.9, "dash": "dash"},
+                legendgroup=session["name"],
+                legendrank=legend_rank + 3,
+                hovertemplate=(
+                    label + " activity %{x:+d} min<br>%{y:.1f} steps/min<extra></extra>"
+                ),
+            ),
+            row=2,
+            col=1,
+        )
+    # Meal time is a shared reference, so the rule spans both panels but is labelled once, in the
+    # glucose panel, using the muted slate system color instead of the warm meal-marker brown.
+    for row in (1, 2):
+        figure.add_vline(
+            x=0, line={"color": MUTED, "width": 1, "dash": "dash"}, row=row, col=1
+        )
+    figure.add_annotation(
+        x=0,
+        xref="x",
+        y=0.965,
+        yref="paper",
+        text="Meal time",
+        showarrow=False,
+        xanchor="left",
+        xshift=5,
+        yanchor="top",
+        font={"size": 11, "color": MUTED},
+    )
+    figure.add_hline(y=0, line={"color": "#b9c3cd", "width": 1}, row=1, col=1)
+    figure.update_layout(
+        **_BASE_LAYOUT,
+        height=height,
+        legend={"orientation": "h", "yanchor": "top", "y": -0.16, "x": 0, "font": {"size": 11}},
+    )
+    # Reserve room for the two-line glucose caption; annotations are not auto-margined.
+    figure.update_layout(margin={"l": 48, "r": 16, "t": 48, "b": 40})
+    figure.update_xaxes(
+        range=[min(minutes), max(minutes)],
+        tickvals=[-30, 0, 30, 60, 90, 120, 150, 180],
+        gridcolor=GRID,
+    )
+    figure.update_xaxes(title="Minutes from meal", row=2, col=1)
+    figure.update_yaxes(title="Δ glucose · mg/dL", gridcolor=GRID, row=1, col=1)
+    figure.update_yaxes(title="steps/min", gridcolor=GRID, rangemode="tozero", row=2, col=1)
+    return figure
+
+
+def ppgr_distribution_figure(view: dict, height: int = 250) -> go.Figure:
+    """Per-meal iAUC distribution for each session, with the comparator marked."""
+    figure = go.Figure()
+    for session in view["sessions"]:
+        follow = session["name"] == "follow_up"
+        color = PPGR_FOLLOW if follow else PPGR_BASELINE
+        figure.add_trace(
+            go.Box(
+                x=session["iauc_values"],
+                name=session["label"],
+                orientation="h",
+                marker={"color": color, "size": 6},
+                line={"color": color, "width": 1.4},
+                fillcolor=PPGR_FOLLOW_FILL if follow else PPGR_BASELINE_FILL,
+                boxpoints="all",
+                jitter=0.5,
+                pointpos=0,
+                hovertemplate=session["label"] + "<br>%{x:.0f} mg/dL·min<extra></extra>",
+            )
+        )
+    figure.add_vline(
+        x=view["comparison"]["comparator_value"],
+        line={"color": DUKE_BLUE, "width": 1.4, "dash": "dot"},
+        annotation_text="earlier-period median",
+        annotation_position="top",
+    )
+    figure.update_layout(**_BASE_LAYOUT, height=height, showlegend=False)
+    figure.update_layout(margin={"l": 104, "r": 24, "t": 34, "b": 40})
+    figure.update_xaxes(title="iAUC · mg/dL·min", gridcolor=GRID, rangemode="tozero")
+    figure.update_yaxes(showgrid=False)
+    return figure
