@@ -11,3 +11,7 @@ select = [
     "UP", # pyupgrade
     "F", # flake8
 ]
+
+[tool.ruff.lint.isort]
+extra-standard-library = ["zoneinfo"]
+known-first-party = ["jupyterhealth_dashboard"]

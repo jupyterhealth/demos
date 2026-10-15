@@ -19,7 +19,6 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 from IPython.display import display
-
 from jupyterhealth_client import JupyterHealthClient
 
 from jupyterhealth_dashboard.chat import build_chat_data
