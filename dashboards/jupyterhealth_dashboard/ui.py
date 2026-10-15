@@ -1,42 +1,120 @@
-"""ipywidgets composition for the Laude dashboard.
+"""ipywidgets composition for the CGM demo dashboard.
 
-This module only *lays out*. It accepts the plain view dict the notebook prepares ---
-patient facts, comparison cards, per-session AGP metrics/bands/percentiles, provenance,
-and per-session pandas frames for the explorer --- and returns one widget tree. All
-retrieval, decoding, session filtering, AGP math, and previous/current derivation happen
-in the notebook; no analytical math lives here and no browser-side JavaScript computes a
-metric.
+This module only *lays out*. It accepts the plain view dict the notebook
+prepares --- role copy, patient facts, latest clinical values, medication
+state, glucose metrics, the selected CGM explorer frame, and optional scripted
+chat --- and returns one widget tree. All retrieval, decoding, period
+detection, and metric math happen in the notebook; no analytical math lives
+here and no browser-side JavaScript computes a metric.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
 from html import escape
 from importlib import resources
 
 import ipywidgets as widgets
 import plotly.graph_objects as go
 
-from .figures import (
-    agp_profile_figure,
-    explorer_figure,
-    ppgr_comparison_figure,
-    ppgr_distribution_figure,
-    session_bounds,
+from .chat import scripted_chat_widget
+from .core import (
+    PATIENT_VIEW,
+    PRACTITIONER_VIEW,
+    TREATMENT_OPTIONS_UNDER_REVIEW,
+    distinct_sources,
+    format_quantity,
+    medication_status,
 )
+from .figures import agp_profile_figure, glucose_trace_figure
+from .icons import render_icon
 
 FULL_WIDTH = widgets.Layout(width="100%")
 _DIVIDER = "1px solid #66717e"
-_PANEL_BORDER = "1px solid #d9e0e7"
 
-# Conventional five-range order, printed goal, and bound copy.
+_PLOTLY_RESIZE_SCRIPT = r"""
+(function () {
+  if (window.__jhPlotlyResizeInstalled) return;
+  window.__jhPlotlyResizeInstalled = true;
+
+  function plotDiv(widget) {
+    if (!widget) return null;
+    return widget.matches(".js-plotly-plot")
+      ? widget
+      : widget.querySelector(".js-plotly-plot");
+  }
+
+  function resizeWidget(widget) {
+    var gd = plotDiv(widget);
+    if (!gd || !window.Plotly) return;
+    if (window.Plotly.Plots && typeof window.Plotly.Plots.resize === "function") {
+      window.Plotly.Plots.resize(gd);
+    } else {
+      gd.dispatchEvent(new Event("plotly_resize"));
+    }
+  }
+
+  var pending = false;
+  function resizeAll() {
+    if (pending) return;
+    pending = true;
+    window.requestAnimationFrame(function () {
+      pending = false;
+      document.querySelectorAll(".jh-plotly-widget").forEach(resizeWidget);
+    });
+  }
+
+  function observe(widget) {
+    if (widget.__jhPlotlyResizeObserved) return;
+    widget.__jhPlotlyResizeObserved = true;
+    if (typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(resizeAll).observe(widget);
+    }
+  }
+
+  function scan() {
+    document.querySelectorAll(".jh-plotly-widget").forEach(observe);
+    resizeAll();
+  }
+
+  if (typeof MutationObserver !== "undefined") {
+    new MutationObserver(scan).observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
+  window.addEventListener("resize", resizeAll);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", resizeAll);
+  }
+  window.setTimeout(scan, 0);
+})();
+"""
+
+_ROLE_BADGE = {
+    PRACTITIONER_VIEW: ("Clinician view", "notes"),
+    PATIENT_VIEW: ("Patient view", "bmi"),
+}
+
+# Conventional five-range order, clinical bound, and label copy.
 BAND_ROWS = (
-    ("very_high", "Very High", ">250 mg/dL", "Goal <5%"),
-    ("high", "High", "181–250 mg/dL", "Goal <25%"),
-    ("target", "Target", "70–180 mg/dL", "Goal ≥70%"),
-    ("low", "Low", "54–69 mg/dL", "Goal <4%"),
-    ("very_low", "Very Low", "<54 mg/dL", "Goal <1%"),
+    ("very_high", "Very High", ">250 mg/dL"),
+    ("high", "High", "181–250 mg/dL"),
+    ("target", "Target", "70–180 mg/dL"),
+    ("low", "Low", "54–69 mg/dL"),
+    ("very_low", "Very Low", "<54 mg/dL"),
 )
+
+_STATUS_LABELS = {
+    "in_range": "In range",
+    "high": "Elevated",
+    "low": "Below range",
+    "na": "Informational",
+}
+_STATUS_ICON_KEYS = {
+    "in_range": "status_in_range",
+    "high": "status_high",
+    "low": "status_low",
+}
 
 
 def load_theme() -> widgets.HTML:
@@ -49,10 +127,116 @@ def _html(markup: str) -> widgets.HTML:
     return widgets.HTML(value=markup, layout=FULL_WIDTH)
 
 
+def _source_badges_html(source) -> str:
+    """Return compact, escaped source-name badges for one display record.
+
+    ``source`` may be a single string, a list of names, or ``None``. Names are
+    trimmed, de-duplicated, and blanks dropped through :func:`distinct_sources`,
+    so the UI never invents an ingestion provenance or a device brand.
+    """
+    if source is None:
+        values = []
+    elif isinstance(source, str):
+        values = [source]
+    else:
+        values = list(source)
+    names = distinct_sources(values)
+    if not names:
+        return ""
+    badges = "".join(
+        f'<span class="jh-source-badge">{escape(name)}</span>' for name in names
+    )
+    return f'<div class="jh-source-badges">{badges}</div>'
+
+
+def _source_badges_widget(source) -> widgets.HTML | None:
+    markup = _source_badges_html(source)
+    if not markup:
+        return None
+    return widgets.HTML(
+        value=markup,
+        layout=widgets.Layout(
+            width="auto",
+            flex="0 1 auto",
+            min_width="0",
+            max_width="100%",
+        ),
+    )
+
+
+def _trace_sources_html(explorer: dict) -> str:
+    """Return one source badge group per available glucose-trace layer.
+
+    Each layer carries its own modality name and its own distinct source names.
+    Optional layers with no usable source are omitted; the CGM layer appears
+    whenever the selected recording has a usable source.
+    """
+    sources = explorer.get("sources", {})
+    groups = []
+    for key, modality in (
+        ("glucose", "Glucose"),
+        ("activity", "Activity"),
+        ("sleep", "Sleep stages"),
+        ("meals", "Meals"),
+    ):
+        names = distinct_sources(sources.get(key, []))
+        if not names:
+            continue
+        joined = ", ".join(escape(name) for name in names)
+        groups.append(
+            '<span class="jh-trace-source">'
+            f'<span class="jh-trace-source-modality">{escape(modality)}</span>'
+            f'<span class="jh-trace-source-names">{joined}</span>'
+            "</span>"
+        )
+    if not groups:
+        return ""
+    return f'<div class="jh-trace-sources">{"".join(groups)}</div>'
+
+
+def _trace_sources_widget(explorer: dict) -> widgets.HTML | None:
+    markup = _trace_sources_html(explorer)
+    if not markup:
+        return None
+    return widgets.HTML(
+        value=markup,
+        layout=widgets.Layout(
+            width="auto",
+            flex="0 1 auto",
+            min_width="0",
+            max_width="100%",
+        ),
+    )
+
+
 def _figure(figure: go.Figure) -> go.FigureWidget:
     widget = go.FigureWidget(figure)
     widget._config = {"displayModeBar": False, "responsive": True}
+    widget.add_class("jh-plotly-widget")
     return widget
+
+
+def _plotly_resize_control() -> widgets.Output:
+    """Return a hidden output that keeps Plotly SVGs sized to their visible widget.
+
+    ``responsive: True`` alone tracks window resizes, not layout changes in a
+    Jupyter/Voilà output area. This tiny script attaches a ``ResizeObserver`` to
+    every ``.jh-plotly-widget`` and calls ``Plotly.Plots.resize`` when the widget's
+    rendered width changes, so the inner SVG cannot stay at Plotly's first-paint
+    width after the notebook host has finished laying out its output area.
+    """
+    control = widgets.Output(
+        layout=widgets.Layout(width="0px", height="0px", overflow="visible")
+    )
+    control.add_class("jh-plotly-resize")
+    control.outputs = (
+        {
+            "output_type": "display_data",
+            "data": {"application/javascript": _PLOTLY_RESIZE_SCRIPT},
+            "metadata": {},
+        },
+    )
+    return control
 
 
 def _section(*children: widgets.Widget) -> widgets.VBox:
@@ -68,15 +252,17 @@ def _section(*children: widgets.Widget) -> widgets.VBox:
 
 
 def _section_head(title: str, *controls: widgets.Widget) -> widgets.HBox:
+    present = [control for control in controls if control is not None]
+    title_widget = widgets.HTML(
+        value=f'<h2 class="jh-h2">{escape(title)}</h2>',
+        layout=widgets.Layout(flex="1 1 auto", min_width="0"),
+    )
     return widgets.HBox(
-        [
-            _html(f'<h2 class="jh-h2">{escape(title)}</h2>'),
-            *controls,
-        ],
+        [title_widget, *present],
         layout=widgets.Layout(
             width="100%",
             display="flex",
-            flex_flow="row",
+            flex_flow="row wrap",
             align_items="flex-end",
             justify_content="space-between",
             margin="0 0 13px 0",
@@ -85,96 +271,172 @@ def _section_head(title: str, *controls: widgets.Widget) -> widgets.HBox:
 
 
 # --------------------------------------------------------------------------------------
-# patient header
+# role header and patient context
+
+
+def _role_header(view: dict) -> widgets.HTML:
+    role = view.get("role") or PRACTITIONER_VIEW
+    label, icon_key = _ROLE_BADGE.get(role, _ROLE_BADGE[PRACTITIONER_VIEW])
+    icon = render_icon(icon_key, label=label)
+    return _html(
+        '<header class="jh-role">'
+        '<div class="jh-role-line">'
+        f'<h1 class="jh-greeting">{escape(view.get("heading", ""))}</h1>'
+        f'<span class="jh-role-badge jh-role-badge-{escape(role)}">{icon}'
+        f'<span class="jh-role-badge-label">{escape(label)}</span>'
+        "</span>"
+        "</div>"
+        + "</header>"
+    )
 
 
 def _patient_header(view: dict) -> widgets.HTML:
-    patient = view["patient"]
+    patient = view.get("patient", {})
     facts = "".join(
-        f'<span class="jh-fact">{escape(fact)}</span>' for fact in patient["facts"] if fact
+        f'<span class="jh-fact">{escape(fact)}</span>'
+        for fact in patient.get("facts", [])
+        if fact
     )
+    initials = patient.get("initials", "")
+    name = patient.get("name", "")
     return _html(
-        '<header class="jh-patient" aria-label="Patient context">'
-        f'<div class="jh-avatar" role="img" aria-label="{escape(patient["name"])} initials, '
-        f'{escape(patient["initials"])}">{escape(patient["initials"])}</div>'
-        '<div class="jh-patient-body">'
-        f'<h1 class="jh-patient-name">{escape(patient["name"])}</h1>'
+        '<div class="jh-patient-meta" aria-label="Patient context">'
+        f'<div class="jh-avatar" role="img" aria-label="{escape(initials)}">'
+        f"{escape(initials)}</div>"
+        '<div class="jh-patient-meta-body">'
+        f'<div class="jh-patient-name">{escape(name)}</div>'
         f'<div class="jh-facts">{facts}</div>'
-        "</div></header>"
+        "</div></div>"
     )
 
 
 # --------------------------------------------------------------------------------------
-# clinical context: explicit previous -> current comparison, never a bare sparkline
+# latest-value clinical cards
+
+
+def _status_icon(status: str) -> str:
+    key = _STATUS_ICON_KEYS.get(status)
+    if not key:
+        return ""
+    return render_icon(key, label=_STATUS_LABELS.get(status, ""))
 
 
 def _context_card(card: dict) -> str:
-    if card.get("comparison"):
-        reading = (
-            '<div class="jh-compare">'
-            f'<span class="jh-compare-prev">{escape(card["previous"])}'
-            f'<i>{escape(card["previous_date"])}</i></span>'
-            '<span class="jh-compare-arrow" aria-hidden="true">→</span>'
-            f'<span class="jh-compare-now">{escape(card["current"])}'
-            f'<i>{escape(card["current_date"])}</i></span>'
-            "</div>"
-        )
-        delta = (
-            f'<span class="jh-delta jh-delta-{escape(card["direction"])}">'
-            f'{escape(card["delta"])} <span aria-hidden="true">{escape(card["arrow"])}</span>'
-            f'<span class="sr-only"> {escape(card["direction"])}</span></span>'
-        )
-    else:
-        reading = (
-            '<div class="jh-compare">'
-            f'<span class="jh-compare-now">{escape(card["current"])}</span>'
-            "</div>"
-        )
-        delta = f'<span class="jh-stable">{escape(card["detail"])}</span>'
+    status = card.get("status") or "na"
+    status_label = card.get("status_label") or _STATUS_LABELS.get(status, "—")
+    reference = card.get("reference") or ""
+    date = card.get("date") or ""
+    icon = render_icon(card.get("icon", ""), label=card.get("label", ""))
+    reference_html = (
+        f'<span class="jh-card-reference">{escape(reference)}</span>' if reference else ""
+    )
+    date_html = f'<span class="jh-card-date">{escape(date)}</span>' if date else ""
+    source_html = _source_badges_html(card.get("source"))
     return (
-        '<article class="jh-lab-card">'
-        f'<h3>{escape(card["label"])}</h3>'
-        f"{reading}"
-        f'<div class="jh-lab-delta">{delta}</div>'
-        "</article>"
+        '<article class="jh-lab-card jh-status-' + escape(str(status)) + '">'
+        '<div class="jh-card-head">'
+        f'<div class="jh-card-title">{icon}<h3>{escape(card.get("label", ""))}</h3></div>'
+        f"{source_html}"
+        "</div>"
+        '<div class="jh-card-reading">'
+        f'<span class="jh-card-value">{escape(str(card.get("value", "n/a")))}</span>'
+        f"{reference_html}"
+        "</div>"
+        '<div class="jh-card-meta">'
+        f'<span class="jh-card-status">{_status_icon(status)} {escape(status_label)}</span>'
+        f"{date_html}"
+        "</div></article>"
     )
 
 
 def _context_section(view: dict) -> widgets.HTML:
-    cards = "".join(_context_card(card) for card in view["context_cards"])
+    cards = "".join(_context_card(card) for card in view.get("context_cards", []))
     return _html(
         '<section class="jh-section">'
         '<div class="jh-section-head"><h2 class="jh-h2">Labs and vitals</h2></div>'
         f'<div class="jh-lab-grid">{cards}</div>'
-        "</section>"
+        + "</section>"
     )
 
 
 # --------------------------------------------------------------------------------------
-# AGP report block: five-band strip + glucose metrics, then the wide percentile plot
+# medication panel
 
 
-def _band_strip_html(session: dict) -> str:
-    by_key = {band["key"]: band for band in session["bands"]}
+def _medication_card(icon_key: str, title: str, value: str, status: str, status_label: str) -> str:
+    return _context_card(
+        {
+            "label": title,
+            "value": value,
+            "status": status,
+            "status_label": status_label,
+            "icon": icon_key,
+        }
+    )
+
+
+def _medication_section(view: dict) -> widgets.VBox:
+    entries = view.get("medications", [])
+    cards = []
+    if entries:
+        for entry in entries:
+            cards.append(
+                _medication_card(
+                    entry.get("icon", "medication"),
+                    entry.get("name", "Medication"),
+                    entry.get("detail", ""),
+                    entry.get("status", "na"),
+                    entry.get("status_label", ""),
+                )
+            )
+    else:
+        cards.append(
+            _medication_card(
+                "medication",
+                "Active medications",
+                medication_status(entries),
+                "na",
+                "None active",
+            )
+        )
+    if view.get("treatment_options_under_review", True):
+        cards.append(
+            _medication_card(
+                "notes",
+                "Treatment plan",
+                TREATMENT_OPTIONS_UNDER_REVIEW,
+                "na",
+                "Review",
+            )
+        )
+    return _section(
+        _section_head("Medications"),
+        _html('<div class="jh-lab-grid jh-med-grid">' + "".join(cards) + "</div>"),
+    )
+
+
+# --------------------------------------------------------------------------------------
+# glucose summary and full-period trace
+
+
+def _band_strip_html(glucose: dict) -> str:
+    by_key = {band["key"]: band for band in glucose["bands"]}
     segments = []
     rows = []
-    for key, label, bounds, goal in BAND_ROWS:
+    aria_parts = []
+    for key, label, bounds in BAND_ROWS:
         band = by_key.get(key, {"percent": 0.0})
         percent = float(band["percent"])
-        # The strip is a geometric encoding: each segment must occupy its actual share.
-        # The adjacent rows retain exact values for segments too short to label legibly.
-        in_strip_label = f"<span>{percent:.0f}%</span>" if percent >= 8.0 else ""
+        aria_parts.append(f"{label} {percent:.1f}%")
         segments.append(
             f'<div class="jh-agp-seg jh-band-{key}" style="flex-grow:{percent:.3f}" '
-            f'title="{escape(label)} {percent:.1f}%">'
-            f"{in_strip_label}</div>"
+            f'title="{escape(label)} {percent:.1f}%" aria-hidden="true"></div>'
         )
         rows.append(
             '<div class="jh-agp-range-row">'
             f'<i class="jh-band-{key}" aria-hidden="true"></i>'
             f'<b>{escape(label)}</b>'
             f'<span class="jh-bounds">{escape(bounds)}</span>'
-            f'<span class="jh-goal">{escape(goal)}</span>'
             f'<span class="jh-pct">{percent:.1f}%</span>'
             "</div>"
         )
@@ -182,284 +444,146 @@ def _band_strip_html(session: dict) -> str:
         '<div class="jh-agp-block jh-agp-ranges">'
         '<div class="jh-agp-head">Time in ranges</div>'
         '<div class="jh-agp-range-body">'
-        f'<div class="jh-agp-strip">{"".join(segments)}</div>'
+        f'<div class="jh-agp-strip" role="img" aria-label="Time in ranges: '
+        f'{escape("; ".join(aria_parts))}">{"".join(segments)}</div>'
         f'<div class="jh-agp-range-rows">{"".join(rows)}</div>'
         "</div>"
-        '<p class="jh-goal-note">Each 1% time in range is about 15 minutes.</p>'
         "</div>"
     )
 
 
-def _metric_row(label: str, value: str, goal: str) -> str:
+def _metric_row(label: str, value: str, target: str = "") -> str:
+    target_html = (
+        f'<span class="jh-metric-target">{escape(target)}</span>' if target else ""
+    )
     return (
-        '<div class="jh-glucose-metric">'
+        '<div class="jh-metric-row">'
         f'<span class="jh-metric-label">{escape(label)}</span>'
         f'<span class="jh-metric-value">{escape(value)}</span>'
-        f'<span class="jh-metric-goal">{escape(goal)}</span>'
+        f"{target_html}"
         "</div>"
     )
 
 
 def _fmt(value: float | None, unit: str, decimals: int) -> str:
-    if value is None:
-        return "n/a"
-    return f"{value:.{decimals}f} {unit}"
+    return format_quantity(value, unit, decimals)
 
 
-def _metrics_html(session: dict) -> str:
-    metrics = session["metrics"]
-    context = (
-        '<div class="jh-agp-context">'
-        f'<div><span>Period</span><b>{escape(session["period"])}</b></div>'
-        f'<div><span>Time CGM active</span><b>'
-        f'{_fmt(session["time_active_percent"], "%", 1)}</b></div>'
-        "</div>"
-    )
+def _metrics_html(glucose: dict) -> str:
+    metrics = glucose["metrics"]
     rows = "".join(
-        (
-            _metric_row("Average glucose", _fmt(metrics["mean_mg_dl"], "mg/dL", 0),
-                        "Goal <154 mg/dL"),
-            _metric_row("GMI", _fmt(metrics["gmi_percent"], "%", 1), "Goal <7%"),
-            _metric_row("Glucose variability", _fmt(metrics["cv_percent"], "%", 1),
-                        "Goal ≤36% (CV)"),
-        )
+        [
+            _metric_row("Period", glucose["period"]),
+            _metric_row(
+                "Time CGM active",
+                _fmt(glucose["time_active_percent"], "%", 1),
+            ),
+            _metric_row(
+                "Average glucose",
+                _fmt(metrics["mean_mg_dl"], "mg/dL", 0),
+                "Target <154 mg/dL",
+            ),
+            _metric_row("GMI", _fmt(metrics["gmi_percent"], "%", 1), "Target <7%"),
+            _metric_row(
+                "Glucose variability",
+                _fmt(metrics["cv_percent"], "%", 1),
+                "Target ≤36% (CV)",
+            ),
+        ]
     )
     return (
         '<div class="jh-agp-block jh-agp-metrics">'
         '<div class="jh-agp-head">Glucose metrics</div>'
-        f"{context}{rows}"
+        f'<div class="jh-metric-rows">{rows}</div>'
         "</div>"
     )
 
 
-def _agp_report_html(session: dict) -> str:
+def _glucose_summary_html(glucose: dict) -> str:
     return (
         '<div class="jh-agp-report">'
-        f"{_band_strip_html(session)}"
-        f"{_metrics_html(session)}"
+        f"{_band_strip_html(glucose)}"
+        f"{_metrics_html(glucose)}"
         "</div>"
     )
 
 
-def _session_dropdown(options: list[tuple[str, str]], on_change) -> widgets.Dropdown:
-    """A compact native session select; the report deliberately has no segmented switch."""
-    control = widgets.Dropdown(
-        options=options,
-        value=options[0][1],
-        layout=widgets.Layout(width="285px"),
-    )
-    control.add_class("jh-session-select")
-    control.observe(lambda change: on_change(change["new"]), names="value")
-    return control
-
-
-# --------------------------------------------------------------------------------------
-# postprandial response comparison: prepared view in, chart and summary out
-
-
-def _ppgr_row(label: str, earlier: str, later: str, change: str) -> str:
-    # ``data-label`` lets the phone layout pair each value with its column name once the
-    # header row is hidden. A count with no delta is marked so the stacked layout drops the
-    # dangling empty "Change" line instead of printing the label with no value. Each value is
-    # wrapped in an explicit ``jh-ppgr-value`` element so the phone grid has a real second
-    # column to constrain; a bare text node would be auto-placed into the label column and
-    # overflow the card.
-    change_class = "jh-ppgr-change" + ("" if change else " jh-ppgr-empty")
-
-    def value(text: str) -> str:
-        return f'<span class="jh-ppgr-value">{escape(text)}</span>'
-
-    return (
-        '<div class="jh-ppgr-row">'
-        f'<span class="jh-ppgr-metric">{escape(label)}</span>'
-        f'<span data-label="Earlier period">{value(earlier)}</span>'
-        f'<span data-label="Later period">{value(later)}</span>'
-        f'<span class="{change_class}" data-label="Change">{value(change)}</span>'
-        "</div>"
-    )
-
-
-def _ppgr_summary_html(view: dict) -> widgets.HTML:
-    comparison = view["comparison"]
-    sessions = {session["name"]: session for session in view["sessions"]}
-    base, follow = sessions["baseline"], sessions["follow_up"]
-    adherence = view["adherence"]
-    percent = comparison["mean_iauc_percent"]
-    change = (
-        f'{comparison["mean_iauc_delta"]:+,.0f} mg/dL·min'
-        + (f" ({percent:+.1f}%)" if percent is not None else "")
-    )
-    activity_change = round(
-        follow["mean_activity_first_30"] - base["mean_activity_first_30"], 1
-    )
-    rows = "".join(
-        [
-            _ppgr_row(
-                "Mean iAUC",
-                f'{base["mean_iauc"]:,.0f}',
-                f'{follow["mean_iauc"]:,.0f}',
-                change,
-            ),
-            _ppgr_row(
-                "Mean activity, first 30 min",
-                f'{base["mean_activity_first_30"]:.0f} steps/min',
-                f'{follow["mean_activity_first_30"]:.0f} steps/min',
-                f"{activity_change:+.0f} steps/min",
-            ),
-            _ppgr_row(
-                "Eligible meals",
-                f'{base["eligible_meals"]} of {base["total_meals"]}',
-                f'{follow["eligible_meals"]} of {follow["total_meals"]}',
-                "",
-            ),
-            _ppgr_row(
-                "Meals meeting the post-meal walk rule",
-                f'{adherence["baseline"]["walks"]} of {adherence["baseline"]["meals"]}',
-                f'{adherence["follow_up"]["walks"]} of {adherence["follow_up"]["meals"]}',
-                "",
-            ),
-        ]
-    )
-    head = (
-        '<div class="jh-ppgr-row jh-ppgr-head">'
-        '<span class="jh-ppgr-metric">Comparison summary</span>'
-        f'<span>{escape(base["label"])}</span><span>{escape(follow["label"])}</span><span>Change</span></div>'
-    )
-    return _html(
-        '<section class="jh-agp-block jh-ppgr-summary">'
-        f"{head}{rows}"
-        "</section>"
-    )
-
-
-def _ppgr_section(view: dict) -> widgets.VBox:
+def _glucose_section(view: dict) -> widgets.VBox:
+    glucose = view["glucose"]
     return _section(
-        _section_head("Postprandial response comparison"),
-        _figure(ppgr_comparison_figure(view)),
-        _ppgr_summary_html(view),
-        widgets.VBox(
-            [
-                _html('<div class="jh-agp-head jh-agp-head-wide">iAUC by meal</div>'),
-                _figure(ppgr_distribution_figure(view)),
-            ],
-            layout=FULL_WIDTH,
+        _section_head(
+            "Glucose summary",
+            _source_badges_widget(glucose.get("sources", [])),
         ),
+        _html(_glucose_summary_html(view["glucose"])),
+    )
+
+
+def _glucose_profile_section(view: dict) -> widgets.VBox:
+    glucose = view["glucose"]
+    return _section(
+        _section_head(
+            "Glucose profile",
+            _source_badges_widget(glucose.get("sources", [])),
+        ),
+        _html(
+            '<p class="jh-note">24-hour 5th–95th percentile profile from the latest '
+            "CGM period. Target 70–180 mg/dL.</p>"
+        ),
+        _figure(agp_profile_figure(view["glucose"])),
+    )
+
+
+def _trace_section(view: dict) -> widgets.VBox:
+    explorer = view.get("explorer", {})
+    overlay_names = []
+    if len(explorer.get("meals", [])) > 0:
+        overlay_names.append("meals")
+    if len(explorer.get("activity", [])) > 0:
+        overlay_names.append("activity")
+    if len(explorer.get("sleep", [])) > 0:
+        overlay_names.append("sleep")
+    if overlay_names:
+        if len(overlay_names) == 1:
+            shared = overlay_names[0]
+        elif len(overlay_names) == 2:
+            shared = " and ".join(overlay_names)
+        else:
+            shared = ", ".join(overlay_names[:-1]) + " and " + overlay_names[-1]
+        note = f"{shared} share one time axis. Target 70–180 mg/dL."
+    else:
+        note = "Target 70–180 mg/dL."
+    return _section(
+        _section_head("Glucose trace", _trace_sources_widget(explorer)),
+        _html(f'<p class="jh-note">{escape(note)}</p>'),
+        _figure(glucose_trace_figure(view["explorer"])),
     )
 
 
 def build_dashboard(view: dict) -> widgets.VBox:
-    """Compose the clinician dashboard widget tree for Voilà or notebook output."""
-    sessions = view["sessions"]
-    explorers = {explorer["name"]: explorer for explorer in view["explorers"]}
-    initial = sessions[0]["name"]
-
-    metrics_by = {session["name"]: _agp_report_html(session) for session in sessions}
-    profile_by = {session["name"]: _figure(agp_profile_figure(session)) for session in sessions}
-
-    # Voilà 0.5.x reliably renders a new FigureWidget supplied through a container,
-    # while live Plotly relayout messages are not dependable after initial render.
-    # Prepare every permitted range before a widget is wrapped or displayed, then the
-    # range controls only replace the holder's child.  ``session_bounds`` returns the
-    # notebook's local wall-clock datetimes, and ISO strings preserve those exact bounds.
-    explorers_by_session: dict[str, dict[str, go.FigureWidget]] = {}
-    explorer_tick_styles = {
-        "1": (6 * 60 * 60 * 1000, "%a %-d<br>%H:%M"),
-        "3": (12 * 60 * 60 * 1000, "%a %-d<br>%H:%M"),
-        "7": (24 * 60 * 60 * 1000, "%a %-d"),
-        "all": (7 * 24 * 60 * 60 * 1000, "%b %-d"),
-    }
-    for name, explorer in explorers.items():
-        start, end = session_bounds(explorer)
-        ranges = {"all": (start, end)}
-        if start is not None and end is not None:
-            ranges.update(
-                {str(days): (max(start, end - timedelta(days=days)), end) for days in (1, 3, 7)}
-            )
-        prepared = {}
-        for days, bounds in ranges.items():
-            figure = explorer_figure(explorer)
-            span_start, span_end = bounds
-            if span_start is not None and span_end is not None:
-                date_range = [span_start.isoformat(), span_end.isoformat()]
-                for axis in (figure.layout.xaxis, figure.layout.xaxis2, figure.layout.xaxis3):
-                    axis.range = date_range
-                    axis.dtick, axis.tickformat = explorer_tick_styles[days]
-            prepared[days] = _figure(figure)
-        explorers_by_session[name] = prepared
-    report_widget = _html(metrics_by[initial])
-
-    reset_button = widgets.Button(
-        description="Reset",
-        layout=widgets.Layout(width="auto"),
-    )
-    reset_button.add_class("jh-reset")
-
-    range_values = (("1", "1"), ("3", "3"), ("7", "7"), ("All", "all"))
-    range_buttons = {
-        days: widgets.Button(description=label, layout=widgets.Layout(width="auto"))
-        for label, days in range_values
-    }
-    for button in range_buttons.values():
-        button.add_class("jh-range-button")
-    range_controls = widgets.HBox(
-        [range_buttons[days] for _, days in range_values],
-        layout=widgets.Layout(display="flex", flex_flow="row nowrap", width="auto"),
-    )
-    range_controls.add_class("jh-range-controls")
-
-    def apply_range(days: str) -> None:
-        for value, button in range_buttons.items():
-            if value == days:
-                button.add_class("jh-range-active")
-            else:
-                button.remove_class("jh-range-active")
-        explorer_section.children = (
-            *explorer_section.children[:-1],
-            explorers_by_session[selector.value][days],
-        )
-
-    def on_session_change(name: str) -> None:
-        report_widget.value = metrics_by[name]
-        agp_section.children = (*agp_section.children[:-1], profile_by[name])
-        apply_range("all")
-
-    def on_reset(_: widgets.Button) -> None:
-        apply_range("all")
-
-    selector = _session_dropdown(
-        [(session["label"], session["name"]) for session in sessions], on_session_change
-    )
-    reset_button.on_click(on_reset)
-    for days, button in range_buttons.items():
-        button.on_click(lambda _, days=days: apply_range(days))
-    agp_section = _section(
-        _section_head("Ambulatory glucose profile", selector),
-        report_widget,
-        _html('<div class="jh-agp-head jh-agp-head-wide">24-hour glucose profile</div>'),
-        profile_by[initial],
-    )
-    explorer_section = _section(
-        _section_head("Glucose explorer", widgets.HBox([range_controls, reset_button])),
-        _html('<p class="jh-note">Meals, activity and sleep share one time axis.</p>'),
-        explorers_by_session[initial]["all"],
-    )
-    apply_range("all")
-
+    """Compose the role-aware dashboard widget tree for Voilà or notebook output."""
     sections = [
         load_theme(),
+        _plotly_resize_control(),
+        _role_header(view),
         _patient_header(view),
-        _context_section(view),
-        agp_section,
-        explorer_section,
+        _medication_section(view),
+        _glucose_section(view),
+        _glucose_profile_section(view),
+        _trace_section(view),
     ]
-    if view.get("ppgr_comparison"):
-        sections.append(_ppgr_section(view["ppgr_comparison"]))
+    if view.get("context_cards"):
+        sections.insert(4, _context_section(view))
+
+    chat = scripted_chat_widget(view)
+    if chat is not None:
+        sections.append(chat)
 
     return widgets.VBox(
         sections,
         layout=widgets.Layout(
             width="100%",
-            max_width="1440px",
+            max_width="100%",
             margin="0 auto",
             padding="0 28px 120px",
         ),
