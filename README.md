@@ -25,49 +25,15 @@ These open in Voilà, which shows the dashboard without the code:
 
 - [CGM Demo (patient view)](https://jupyter-health.2i2c.cloud/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fjupyterhealth%2Fdemos&urlpath=voila%2Frender%2Fdemos%2Fdashboards%2Fcgm-demo.ipynb%3Fview%3Dpatient&branch=main)
 
-### CGM Demo configuration
+### CGM demo parameters
 
-The CGM demo shows one full, automatically detected CGM recording period rather
-than a previous/follow-up comparison. Add `?view=patient` to show the
-patient-oriented greeting (and, when enabled, the patient chat script); omit it
-(or use `?view=practitioner`) for the default clinician view.
-
-- `JHE_STUDY_ID` overrides the local `30014` demo-study fallback.
-- `CGM_SESSION_GAP_HOURS` sets the gap that separates contiguous CGM periods
-  (default `24`).
-- `JHE_FHIR_SOURCE_ID` sets the source id used for auxiliary records (default
-  `90009`).
-- `JHE_AUXILIARY_SYSTEM` sets the coding system used for auxiliary records (default
-  `urn:jupyterhealth:synthetic:alex-k:2026`).
-- `DEMO_PRACTITIONER_LAST_NAME` overrides the scripted practitioner greeting
-  (default `Kishore`; the greeting is intentionally not tied to the
-  authenticated user's surname).
-- `JHE_VIEW` forces `patient` or `practitioner` for deterministic local review
-  when no `?view=` query is present; the query remains authoritative on the
-  Berkeley deployment.
-- `SHOW_SCRIPTED_CHAT` enables the deterministic demo chat (default `false`).
-  When enabled it appears as a closed-by-default floating launcher that opens a
-  bounded scripted panel. There is no LLM, API key, or network dependency in
-  that chat. The patient role exposes a typed composer; the practitioner role
-  is a report-delivery feed with no composer.
-
-Family history is intentionally not requested or rendered in the CGM demo; the
-dashboard keeps only the bounded researcher previews behind the standard Voilà
-guard when it is opened in JupyterLab.
-
-The dashboard intentionally has no blood-pressure chart. The medication panel
-shows the current honest state (“No active medications” and “Treatment options
-under review”) while leaving room for future structured medication records.
-Official MIT-licensed Tabler SVGs are vendored locally under
-`dashboards/jupyterhealth_dashboard/icons/`. The practitioner view is a
-report-delivery feed (no free-text composer): its opening message shows “A
-report is ready for you.” followed by the "UC HTN Way 3.0 Report" link to the
-locally served generic hypertension algorithm reference at
-`dashboards/jupyterhealth_dashboard/assets/uc-way-htn-algorithm.png`. That PNG
-is served by Voilà's default `file_allowlist`, never from a remote URL, and is
-not presented as a patient-specific clinical result or given any additional
-subtitle. The patient chat keeps the sushi comparison, HbA1c, biomarker, and
-reference-range scripts and has no Med-BEAM referral or appointment flow.
+- `JHE_STUDY_ID`: study ID (default `30014`).
+- `JHE_FHIR_SOURCE_ID`: auxiliary-record source ID (default `90009`).
+- `JHE_AUXILIARY_SYSTEM`: auxiliary-record coding system (default `urn:jupyterhealth:synthetic:alex-k:2026`).
+- `CGM_SESSION_GAP_HOURS`: gap separating CGM recording periods (default `24`).
+- `DEMO_PRACTITIONER_LAST_NAME`: clinician greeting (default `Kishore`).
+- `SHOW_SCRIPTED_CHAT`: show demo chat (default `false`).
+- `JHE_VIEW`: `patient` or `practitioner` for local review; the URL's `?view=` takes precedence.
 
 ## Researcher views
 
