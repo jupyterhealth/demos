@@ -73,7 +73,7 @@ REPORT_LINK_LABEL = "UC HTN Way 3.0 Report"
 
 def scripted_chat_enabled() -> bool:
     """Whether the deterministic demo chat should be rendered."""
-    return os.getenv("SHOW_SCRIPTED_CHAT", "false").strip().lower() in {
+    return os.getenv("SHOW_SCRIPTED_CHAT", "true").strip().lower() in {
         "1",
         "true",
         "yes",

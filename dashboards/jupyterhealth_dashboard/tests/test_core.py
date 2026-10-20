@@ -103,9 +103,9 @@ class ConfigurationTests(unittest.TestCase):
                 "urn:jupyterhealth:synthetic:alex-k:2026",
             )
 
-    def test_chat_flag_defaults_off(self):
+    def test_chat_flag_defaults_on(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertFalse(core.scripted_chat_enabled())
+            self.assertTrue(core.scripted_chat_enabled())
 
     def test_chat_flag_enabled(self):
         for value in ("1", "true", "TRUE", "yes", "on"):

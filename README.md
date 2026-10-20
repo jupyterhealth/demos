@@ -32,7 +32,7 @@ These open in Voilà, which shows the dashboard without the code:
 - `JHE_AUXILIARY_SYSTEM`: auxiliary-record coding system (default `urn:jupyterhealth:synthetic:alex-k:2026`).
 - `CGM_SESSION_GAP_HOURS`: gap separating CGM recording periods (default `24`).
 - `DEMO_PRACTITIONER_LAST_NAME`: clinician greeting (default `Kishore`).
-- `SHOW_SCRIPTED_CHAT`: show demo chat (default `false`).
+- `SHOW_SCRIPTED_CHAT`: show demo chat (default `true`; set `false` to hide).
 - `JHE_VIEW`: `patient` or `practitioner` for local review; the URL's `?view=` takes precedence.
 
 ## Researcher views
