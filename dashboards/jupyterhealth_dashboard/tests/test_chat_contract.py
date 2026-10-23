@@ -94,7 +94,7 @@ def _practitioner_chat() -> dict:
     return {
         "report": {
             "label": core.REPORT_LINK_LABEL,
-            "href": core.UC_HTN_ALGORITHM_REL_PATH,
+            "href": core.UC_HTN_REPORT_URL,
         },
         "summary_lines": list(core.PRACTITIONER_SUMMARY_LINES),
     }
@@ -131,7 +131,7 @@ class ChatPlanContractTests(unittest.TestCase):
     def test_build_chat_data_wires_practitioner_report_without_composer_data(self):
         chat_data = chat.build_chat_data("practitioner", core.scripted_sushi_fallback(), [])
         self.assertEqual(chat_data["report"]["label"], core.REPORT_LINK_LABEL)
-        self.assertEqual(chat_data["report"]["href"], core.UC_HTN_ALGORITHM_REL_PATH)
+        self.assertEqual(chat_data["report"]["href"], core.UC_HTN_REPORT_URL)
         self.assertEqual(chat_data["summary_lines"], list(core.PRACTITIONER_SUMMARY_LINES))
         self.assertNotIn("analysis", chat_data)
         self.assertNotIn("context_cards", chat_data)
@@ -416,8 +416,9 @@ class FloatingChatWidgetContractTests(unittest.TestCase):
         )
         self.assertIsNotNone(link)
         self.assertIn("A report is ready for you.", link.value)
-        self.assertIn(f'href="{core.UC_HTN_ALGORITHM_REL_PATH}"', link.value)
+        self.assertIn(f'href="{core.UC_HTN_REPORT_URL}"', link.value)
         self.assertIn('target="_blank"', link.value)
+        self.assertIn('rel="noopener"', link.value)
         self.assertLess(
             link.value.index("A report is ready for you."),
             link.value.index("jh-report-link"),

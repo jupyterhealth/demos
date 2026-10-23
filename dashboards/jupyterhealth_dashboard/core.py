@@ -59,14 +59,9 @@ PATIENT_CHAT_STEPS = (
     "Preparing the result…",
 )
 
-# Local link contract for the practitioner report-delivery feed. The path is
-# relative to the rendered notebook route, which lives in
-# ``dashboards/cgm-demo.ipynb``. The package directory beside that notebook is
-# ``jupyterhealth_dashboard``, so the local asset must be reached through that
-# prefix. The attached hypertension algorithm image is vendored at
-# ``dashboards/jupyterhealth_dashboard/assets/uc-way-htn-algorithm.png`` and is
-# served by Voilà's default ``file_allowlist`` (it already permits PNG images).
-UC_HTN_ALGORITHM_REL_PATH = "jupyterhealth_dashboard/assets/uc-way-htn-algorithm.png"
+# Public report destination supplied for the practitioner report-delivery feed.
+# The older clinical-algorithm PNG remains packaged but is not the report link.
+UC_HTN_REPORT_URL = "https://ucop.app.box.com/s/e3g0eozjbl8s7ueyp9nk8bo4quzzikp0"
 
 # Practitioner report-delivery copy.
 REPORT_LINK_LABEL = "UC HTN Way 3.0 Report"
@@ -287,7 +282,7 @@ def patient_capabilities() -> tuple[str, ...]:
 
 def practitioner_capabilities() -> tuple[str, ...]:
     """Exact deterministic actions the practitioner role can complete."""
-    return ("Open the attached UC HTN Way 3.0 clinical algorithm reference.",)
+    return ("Open the UC HTN Way 3.0 report link.",)
 
 
 def capabilities_for_role(role: str | None = None) -> tuple[str, ...]:
