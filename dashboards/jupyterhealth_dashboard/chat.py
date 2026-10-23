@@ -11,8 +11,8 @@ model answer. The patient flow has no Med-BEAM referral, appointment, or consent
 branch: a matched sushi prompt ends naturally with its data visualization.
 
 The practitioner role is a report-delivery feed, not a free-text composer. Its opening
-assistant message shows ``A report is ready for you.`` followed by the locally served
-UC HTN Way 3.0 link, with no additional visible caption. A hidden demo gesture
+assistant message shows ``A report is ready for you.`` followed by the externally hosted
+UC HTN Way 3.0 report link, with no additional visible caption. A hidden demo gesture
 (double-click the chat header) appends a synthetic Med-BEAM summary once as a normal
 assistant bubble containing the same scripted, source-grounded summary lines, never a
 real clinical recommendation.
@@ -41,7 +41,7 @@ from .core import (
     PRACTITIONER_VIEW,
     REPORT_LINK_LABEL,
     SYNTHETIC_DISCLOSURE,
-    UC_HTN_ALGORITHM_REL_PATH,
+    UC_HTN_REPORT_URL,
     capabilities_for_role,
     chat_demo_limitation,
     chat_staged_steps,
@@ -380,7 +380,7 @@ def _capability_surface_html(role: str, chat_data: dict | None = None) -> str:
 
 def _report_delivery_html(chat_data: dict) -> str:
     report = (chat_data or {}).get("report") or {}
-    href = str(report.get("href") or UC_HTN_ALGORITHM_REL_PATH)
+    href = str(report.get("href") or UC_HTN_REPORT_URL)
     label = str(report.get("label") or REPORT_LINK_LABEL)
     icon = render_icon("notes", label=label)
     return (
@@ -392,7 +392,7 @@ def _report_delivery_html(chat_data: dict) -> str:
 
 
 def _practitioner_opening_html(chat_data: dict) -> str:
-    """Opening assistant bubble carrying the locally served report link."""
+    """Opening assistant bubble carrying the report link."""
     return _assistant_message_html(
         f"{escape(opening_message(PRACTITIONER_VIEW))}{_report_delivery_html(chat_data)}"
     )
@@ -504,7 +504,7 @@ def build_chat_data(
     return {
         "report": {
             "label": REPORT_LINK_LABEL,
-            "href": UC_HTN_ALGORITHM_REL_PATH,
+            "href": UC_HTN_REPORT_URL,
         },
         "summary_lines": list(PRACTITIONER_SUMMARY_LINES),
     }

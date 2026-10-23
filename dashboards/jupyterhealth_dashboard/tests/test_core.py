@@ -341,13 +341,11 @@ class ScriptedChatStructureTests(unittest.TestCase):
 
 
 class ReportPathTests(unittest.TestCase):
-    def test_report_path_is_local_and_package_relative(self):
+    def test_report_destination_is_the_supplied_box_link(self):
         self.assertEqual(
-            core.UC_HTN_ALGORITHM_REL_PATH,
-            "jupyterhealth_dashboard/assets/uc-way-htn-algorithm.png",
+            core.UC_HTN_REPORT_URL,
+            "https://ucop.app.box.com/s/e3g0eozjbl8s7ueyp9nk8bo4quzzikp0",
         )
-        self.assertFalse(core.UC_HTN_ALGORITHM_REL_PATH.startswith(("http://", "https://")))
-        self.assertIn("jupyterhealth_dashboard/", core.UC_HTN_ALGORITHM_REL_PATH)
 
 
 class RequestedViewNameTests(unittest.TestCase):

@@ -11,12 +11,9 @@ The package only draws: :mod:`jupyterhealth_dashboard.figures`,
 packaged ``theme.css``. It contains no Exchange access, retrieval, decoding,
 normalization, or check.
 
-The practitioner report-delivery feed links to the locally vendored hypertension
-algorithm image at
-``dashboards/jupyterhealth_dashboard/assets/uc-way-htn-algorithm.png`` through a
-package-relative ``jupyterhealth_dashboard/assets/`` route. Voilà's default
-``file_allowlist`` permits PNG assets, so no separate serving configuration is
-required for that image.
+The practitioner report-delivery feed opens the supplied UC HTN Way 3.0 Box
+shared link in a new tab. The older locally vendored algorithm image remains
+packaged but is not used as the report destination.
 
 The ``build_dashboard`` export is lazy so tests and the notebook can import the
 dependency-free :mod:`jupyterhealth_dashboard.core` module without importing
