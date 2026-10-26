@@ -40,10 +40,18 @@ PATIENT_CHAT_STARTER = (
     "One of my sushi meals had a much sharper response than another one. Why is that?"
 )
 
+RANDOMIZE_LABEL = "Randomize"
+PRACTITIONER_RANDOMIZED_TREATMENT = "amlodipine/valsartan"
+PRACTITIONER_RANDOMIZATION_ASSIGNMENT_PREFIX = "Alex has been randomized to "
+PRACTITIONER_RANDOMIZATION_BENEFITS = (
+    "More likely to reach BP goal of 140/90",
+    "Faster time to BP goal (3.8 vs 4.9 weeks)",
+    "More Time in Target Range (54% vs 46%)",
+)
 PRACTITIONER_SUMMARY_LINES = (
-    "Amlodipine/valsartan modeled faster blood-pressure control than valsartan/HCTZ over 26 weeks.",
-    "It provides more time under blood-pressure control over 26 weeks.",
-    "Compare adverse effects and patient circumstances before any decision.",
+    f"{PRACTITIONER_RANDOMIZATION_ASSIGNMENT_PREFIX}"
+    f"{PRACTITIONER_RANDOMIZED_TREATMENT}",
+    *PRACTITIONER_RANDOMIZATION_BENEFITS,
 )
 
 SYNTHETIC_DISCLOSURE = "Synthetic demo — not a real patient record."
@@ -63,7 +71,7 @@ PATIENT_CHAT_STEPS = (
 # The older clinical-algorithm PNG remains packaged but is not the report link.
 UC_HTN_REPORT_URL = "https://ucop.app.box.com/s/e3g0eozjbl8s7ueyp9nk8bo4quzzikp0"
 
-# Practitioner report-delivery copy.
+# Practitioner report-delivery and selected randomization copy.
 REPORT_LINK_LABEL = "UC HTN Way 3.0 Report"
 
 def scripted_chat_enabled() -> bool:

@@ -275,10 +275,22 @@ class ScriptedChatStructureTests(unittest.TestCase):
             "One of my sushi meals had a much sharper response than another one. Why is that?",
         )
 
-    def test_practitioner_summary_is_three_lines(self):
-        self.assertEqual(len(core.PRACTITIONER_SUMMARY_LINES), 3)
-        self.assertIn("amlodipine/valsartan", core.PRACTITIONER_SUMMARY_LINES[0].lower())
-        self.assertIn("valsartan/hctz", core.PRACTITIONER_SUMMARY_LINES[0].lower())
+    def test_practitioner_randomization_copy_is_exact(self):
+        self.assertEqual(core.RANDOMIZE_LABEL, "Randomize")
+        self.assertEqual(core.PRACTITIONER_RANDOMIZED_TREATMENT, "amlodipine/valsartan")
+        self.assertEqual(
+            core.PRACTITIONER_SUMMARY_LINES,
+            (
+                "Alex has been randomized to amlodipine/valsartan",
+                "More likely to reach BP goal of 140/90",
+                "Faster time to BP goal (3.8 vs 4.9 weeks)",
+                "More Time in Target Range (54% vs 46%)",
+            ),
+        )
+        self.assertEqual(
+            core.PRACTITIONER_RANDOMIZATION_BENEFITS,
+            core.PRACTITIONER_SUMMARY_LINES[1:],
+        )
         self.assertNotIn("prescribed", " ".join(core.PRACTITIONER_SUMMARY_LINES).lower())
 
     def test_fallback_is_deterministic(self):

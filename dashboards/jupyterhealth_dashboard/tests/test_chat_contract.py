@@ -406,7 +406,7 @@ class FloatingChatWidgetContractTests(unittest.TestCase):
         )
         self.assertEqual(suggestion_buttons, [])
 
-    def test_practitioner_opening_has_report_sentence_and_link_without_caption(self):
+    def test_practitioner_opening_has_only_report_and_selected_randomize(self):
         host = self._build("practitioner")
         link = _find(
             host,
@@ -423,11 +423,46 @@ class FloatingChatWidgetContractTests(unittest.TestCase):
             link.value.index("A report is ready for you."),
             link.value.index("jh-report-link"),
         )
+        controls_match = re.search(
+            r'<div class="jh-chat-report-controls">(.*?)</div>',
+            link.value,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(controls_match)
+        controls = controls_match.group(1)
+        self.assertIn('class="jh-report-link"', controls)
+        self.assertIn('class="jh-randomize-control jh-randomize-control-selected"', controls)
+        self.assertIn('type="button"', controls)
+        self.assertIn('aria-pressed="true"', controls)
+        self.assertIn(">Randomize</button>", controls)
+        self.assertLess(
+            controls.index('class="jh-report-link"'),
+            controls.index(">Randomize</button>"),
+        )
+        for line in core.PRACTITIONER_SUMMARY_LINES:
+            self.assertNotIn(line, link.value)
+        self.assertNotIn("jh-chat-randomization-summary", link.value)
+        self.assertNotIn("jh-chat-randomization-treatment", link.value)
+        self.assertEqual(link.value.count('class="jh-chat-msg jh-chat-assistant'), 1)
         self.assertNotIn("Clinical algorithm reference", link.value)
         self.assertNotIn("jh-report-cue", link.value)
         self.assertNotIn("for this patient", link.value)
         self.assertNotIn("jh-medbeam-link", link.value)
         self.assertNotIn("medbeam-report.png", link.value)
+        self.assertNotIn("Med-BEAM", link.value)
+
+    def test_practitioner_opening_escapes_report_values(self):
+        rendered = chat._practitioner_opening_html(
+            {
+                "report": {
+                    "label": "<script>unsafe()</script>",
+                    "href": 'https://example.test/?next="unsafe"',
+                }
+            }
+        )
+        self.assertNotIn("<script>", rendered)
+        self.assertIn("&lt;script&gt;unsafe()&lt;/script&gt;", rendered)
+        self.assertIn("&quot;unsafe&quot;", rendered)
 
     def test_practitioner_feed_has_no_composer(self):
         host = self._build("practitioner")
@@ -444,22 +479,45 @@ class FloatingChatWidgetContractTests(unittest.TestCase):
             [],
         )
 
-    def test_practitioner_header_has_hidden_gesture_button(self):
-        host = self._build("practitioner")
+    def test_practitioner_header_has_hidden_keyboard_focusable_gesture(self):
+        practitioner_host = self._build("practitioner")
         gesture = _find(
-            host,
-            lambda widget: "jh-chat-header-gesture" in getattr(widget, "_dom_classes", ()),
+            practitioner_host,
+            lambda widget: "jh-chat-header-gesture"
+            in getattr(widget, "_dom_classes", ()),
         )
-        self.assertIsNotNone(gesture)
+        self.assertIsInstance(gesture, widgets.Button)
+        self.assertEqual(gesture.description, "")
+        self.assertEqual(gesture.tooltip, "iCKM Advisor")
+        self.assertFalse(gesture.disabled)
         patient_host = self._build("patient")
         self.assertIsNone(
             _find(
                 patient_host,
-                lambda widget: "jh-chat-header-gesture" in getattr(widget, "_dom_classes", ()),
+                lambda widget: "jh-chat-header-gesture"
+                in getattr(widget, "_dom_classes", ()),
             )
         )
 
-    def test_gesture_appends_medbeam_summary_bubble_once_without_button(self):
+    def test_randomization_summary_is_exact_and_separate_from_opening(self):
+        rendered = chat._randomization_summary_html(_practitioner_chat())
+        self.assertEqual(
+            rendered,
+            '<div class="jh-chat-msg jh-chat-assistant">'
+            '<div class="jh-chat-bubble">'
+            '<div class="jh-chat-result jh-chat-randomization-summary">'
+            '<p class="jh-chat-randomization-assignment">'
+            "Alex has been randomized to "
+            '<strong class="jh-chat-randomization-treatment">'
+            "amlodipine/valsartan</strong></p>"
+            '<ul class="jh-chat-randomization-outcomes">'
+            "<li>More likely to reach BP goal of 140/90</li>"
+            "<li>Faster time to BP goal (3.8 vs 4.9 weeks)</li>"
+            "<li>More Time in Target Range (54% vs 46%)</li>"
+            "</ul></div></div></div>",
+        )
+
+    def test_gesture_appends_randomization_message_once(self):
         host = self._build("practitioner")
         gesture = _find(
             host,
@@ -469,40 +527,56 @@ class FloatingChatWidgetContractTests(unittest.TestCase):
             host,
             lambda widget: isinstance(widget, widgets.HTML) and "jh-chat-msg" in widget.value,
         )
+        for line in core.PRACTITIONER_SUMMARY_LINES:
+            self.assertNotIn(line, transcript.value)
+
+        # Button.click models the browser activation emitted by a double-click,
+        # Enter, or Space on the focusable overlay.
+        gesture.click()
+        self.assertNotIn(
+            '<div class="jh-chat-result jh-chat-randomization-summary">',
+            transcript.value,
+        )
+        gesture.click()
+
+        self.assertEqual(
+            transcript.value.count('class="jh-chat-msg jh-chat-assistant'),
+            2,
+        )
+        self.assertEqual(
+            transcript.value.count(
+                '<div class="jh-chat-result jh-chat-randomization-summary">'
+            ),
+            1,
+        )
+        self.assertEqual(
+            transcript.value.count("Alex has been randomized to "),
+            1,
+        )
+        for line in core.PRACTITIONER_RANDOMIZATION_BENEFITS:
+            self.assertEqual(transcript.value.count(line), 1)
+        self.assertIn(
+            '<strong class="jh-chat-randomization-treatment">'
+            "amlodipine/valsartan</strong>",
+            transcript.value,
+        )
+        self.assertNotIn("Here are the takeaways", transcript.value)
         self.assertNotIn("Med-BEAM", transcript.value)
-        self.assertIsNone(
-            _find(
-                host,
-                lambda widget: "jh-chat-takeaways-row" in getattr(widget, "_dom_classes", ()),
-            )
-        )
-        self.assertIsNone(
-            _find(
-                host,
-                lambda widget: isinstance(widget, widgets.Button)
-                and widget.description == "View takeaways",
-            )
-        )
 
-        # A double-click is two activations inside the detector window.
-        gesture.click()
-        gesture.click()
-        self.assertIn("Here are the takeaways from the Med-BEAM report:", transcript.value)
-        self.assertIn("Amlodipine/valsartan", transcript.value)
-        self.assertIn("valsartan/HCTZ", transcript.value)
-        self.assertEqual(
-            transcript.value.count("Here are the takeaways from the Med-BEAM report:"),
-            1,
-        )
-        self.assertNotIn("A Med-BEAM summary is ready", transcript.value)
-
-        # Repeated double-clicks must not append a duplicate summary.
         gesture.click()
         gesture.click()
         self.assertEqual(
-            transcript.value.count("Here are the takeaways from the Med-BEAM report:"),
+            transcript.value.count(
+                '<div class="jh-chat-result jh-chat-randomization-summary">'
+            ),
             1,
         )
+        self.assertEqual(
+            transcript.value.count("Alex has been randomized to "),
+            1,
+        )
+        for line in core.PRACTITIONER_RANDOMIZATION_BENEFITS:
+            self.assertEqual(transcript.value.count(line), 1)
 
     def test_sushi_submit_shows_comparison_without_referral(self):
         host = self._build("patient")
@@ -657,17 +731,6 @@ class ChatCssContractTests(unittest.TestCase):
         self.assertIn("line-height: 1.2", header)
         self.assertNotIn(".jh-chat-hint", self.css)
 
-    def test_meal_comparison_panels_are_side_by_side_with_timestamps(self):
-        grid = _css_rule(self.css, ".jh-chat-meal-grid")
-        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", grid)
-        svg = _css_rule(self.css, ".jh-chat-meal-svg")
-        self.assertIn("width: 100%", svg)
-        self.assertIn("height: 128px", svg)
-        self.assertIn(".jh-chat-meal-axis", self.css)
-        self.assertIn(".jh-chat-meal-time", self.css)
-        steps = _css_rule(self.css, ".jh-chat-meal-steps")
-        self.assertIn("fill: #4b9bd5", steps)
-
     def test_header_gesture_is_absolute_transparent_and_full_size(self):
         block = _css_rule(self.css, ".jh-chat-header-gesture")
         self.assertIn("position: absolute", block)
@@ -679,13 +742,47 @@ class ChatCssContractTests(unittest.TestCase):
         header = _css_rule(self.css, ".jh-chat-header")
         self.assertIn("position: relative", header)
 
-    def test_report_link_is_styled_without_caption_or_takeaway_button_chrome(self):
+    def test_meal_comparison_panels_are_side_by_side_with_timestamps(self):
+        grid = _css_rule(self.css, ".jh-chat-meal-grid")
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", grid)
+        svg = _css_rule(self.css, ".jh-chat-meal-svg")
+        self.assertIn("width: 100%", svg)
+        self.assertIn("height: 128px", svg)
+        self.assertIn(".jh-chat-meal-axis", self.css)
+        self.assertIn(".jh-chat-meal-time", self.css)
+        steps = _css_rule(self.css, ".jh-chat-meal-steps")
+        self.assertIn("fill: #4b9bd5", steps)
+
+    def test_report_and_randomize_controls_share_a_responsive_horizontal_row(self):
+        controls = _css_rule(self.css, ".jh-chat-report-controls")
+        self.assertIn("align-items: center", controls)
+        self.assertIn("display: flex", controls)
+        self.assertIn("flex-wrap: nowrap", controls)
+        link = _css_rule(self.css, ".jh-report-link")
+        self.assertIn("flex: 0 1 auto", link)
+        self.assertIn("min-width: 0", link)
+        randomize = _css_rule(self.css, ".jh-randomize-control")
+        self.assertIn("flex: 0 0 auto", randomize)
+
+    def test_randomize_selected_state_is_visually_highlighted(self):
+        selected = _css_rule(self.css, '.jh-randomize-control[aria-pressed="true"]')
+        self.assertIn("background: var(--jh-navy)", selected)
+        self.assertIn("color: var(--jh-white)", selected)
+        treatment = _css_rule(self.css, ".jh-chat-randomization-treatment")
+        self.assertIn("color: var(--jh-navy)", treatment)
+        self.assertIn("font-weight:", treatment)
+
+    def test_randomization_summary_has_no_divider_or_divider_spacing(self):
+        self.assertNotIn(".jh-chat-randomization-summary {", self.css)
+
+    def test_report_link_is_styled_without_old_summary_chrome(self):
         link = _css_rule(self.css, ".jh-report-link")
         self.assertIn("border: 1px solid", link)
         self.assertIn("display: inline-flex", link)
         self.assertNotIn(".jh-report-cue", self.css)
         self.assertNotIn(".jh-chat-takeaways", self.css)
         self.assertNotIn(".jh-chat-takeaways-row", self.css)
+        self.assertNotIn(".jh-chat-summary-list", self.css)
 
     def test_voila_containment_override_targets_lumino_box_panel(self):
         self.assertIn("body.jp-Notebook .lm-BoxPanel,", self.css)

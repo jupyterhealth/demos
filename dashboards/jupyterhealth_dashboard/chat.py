@@ -12,10 +12,10 @@ branch: a matched sushi prompt ends naturally with its data visualization.
 
 The practitioner role is a report-delivery feed, not a free-text composer. Its opening
 assistant message shows ``A report is ready for you.`` followed by the externally hosted
-UC HTN Way 3.0 report link, with no additional visible caption. A hidden demo gesture
-(double-click the chat header) appends a synthetic Med-BEAM summary once as a normal
-assistant bubble containing the same scripted, source-grounded summary lines, never a
-real clinical recommendation.
+UC HTN Way 3.0 report link and a visibly selected ``Randomize`` control. A hidden,
+keyboard-focusable header button detects two activations and appends one scripted
+randomization result as a separate assistant bubble. Subsequent double-clicks do not
+duplicate that result.
 
 The staged thinking steps are rendered as a single transient conversation event that
 is replaced in place on the active asyncio/IPython/Tornado event loop when one is
@@ -37,8 +37,10 @@ import ipywidgets as widgets
 
 from .core import (
     PATIENT_VIEW,
+    PRACTITIONER_RANDOMIZED_TREATMENT,
     PRACTITIONER_SUMMARY_LINES,
     PRACTITIONER_VIEW,
+    RANDOMIZE_LABEL,
     REPORT_LINK_LABEL,
     SYNTHETIC_DISCLOSURE,
     UC_HTN_REPORT_URL,
@@ -385,27 +387,39 @@ def _report_delivery_html(chat_data: dict) -> str:
     icon = render_icon("notes", label=label)
     return (
         '<div class="jh-chat-report-delivery">'
+        '<div class="jh-chat-report-controls">'
         f'<a class="jh-report-link" href="{escape(href, quote=True)}" '
         f'target="_blank" rel="noopener">{icon} {escape(label)}</a>'
+        '<button type="button" '
+        'class="jh-randomize-control jh-randomize-control-selected" '
+        f'aria-pressed="true">{escape(RANDOMIZE_LABEL)}</button>'
+        "</div>"
         "</div>"
     )
 
 
 def _practitioner_opening_html(chat_data: dict) -> str:
-    """Opening assistant bubble carrying the report link."""
+    """Opening bubble carrying the report link and selected Randomize control."""
     return _assistant_message_html(
         f"{escape(opening_message(PRACTITIONER_VIEW))}{_report_delivery_html(chat_data)}"
     )
 
 
-def _medbeam_summary_html(chat_data: dict) -> str:
-    """Return one natural assistant bubble carrying the scripted Med-BEAM takeaways."""
-    lines = chat_data.get("summary_lines") or list(PRACTITIONER_SUMMARY_LINES)
-    items = "".join(f"<li>{escape(line)}</li>" for line in lines)
+def _randomization_summary_html(chat_data: dict) -> str:
+    """Return one assistant bubble containing only the scripted randomization result."""
+    lines = list((chat_data or {}).get("summary_lines") or PRACTITIONER_SUMMARY_LINES)
+    assignment = escape(lines[0])
+    treatment = escape(PRACTITIONER_RANDOMIZED_TREATMENT)
+    assignment = assignment.replace(
+        treatment,
+        f'<strong class="jh-chat-randomization-treatment">{treatment}</strong>',
+        1,
+    )
+    outcomes = "".join(f"<li>{escape(line)}</li>" for line in lines[1:])
     content = (
-        '<div class="jh-chat-result jh-chat-summary">'
-        '<p class="jh-chat-explanation">Here are the takeaways from the Med-BEAM report:</p>'
-        f'<ul class="jh-chat-summary-list">{items}</ul>'
+        '<div class="jh-chat-result jh-chat-randomization-summary">'
+        f'<p class="jh-chat-randomization-assignment">{assignment}</p>'
+        f'<ul class="jh-chat-randomization-outcomes">{outcomes}</ul>'
         "</div>"
     )
     return _assistant_message_html(content)
@@ -597,9 +611,8 @@ def scripted_chat_widget(view: dict):
     header_children = [identity, header_actions]
     gesture_button = None
     if role == PRACTITIONER_VIEW:
-        # A hidden, keyboard-focusable overlay covers the header so the demo gesture
-        # (double-click) stays discoverable without a visible toggle. It is styled
-        # transparent and absolutely positioned by ``theme.css``.
+        # A keyboard-focusable transparent overlay restores the hidden header
+        # gesture while leaving the minimize and close controls clickable.
         gesture_button = widgets.Button(
             description="",
             tooltip="iCKM Advisor",
@@ -628,8 +641,8 @@ def scripted_chat_widget(view: dict):
         opening_html = _assistant_message_html(opening_message(role))
         onboarding_html = _capability_surface_html(role, chat_data)
     else:
-        # The clinician report link lives inside the opening transcript bubble so it
-        # stays in scrollable history; the onboarding slot stays empty.
+        # The clinician report controls live inside the opening transcript bubble
+        # so they stay in scrollable history.
         opening_html = _practitioner_opening_html(chat_data)
         onboarding_html = ""
 
@@ -688,7 +701,7 @@ def scripted_chat_widget(view: dict):
 
     history = [opening_html]
     scheduler = active_scheduler()
-    medbeam_revealed = {"value": False}
+    randomization_revealed = {"value": False}
     double_click = DoubleClickDetector()
 
     def render() -> None:
@@ -729,16 +742,16 @@ def scripted_chat_widget(view: dict):
             restore=restore_composer,
         )
 
-    def reveal_medbeam_summary() -> None:
-        if medbeam_revealed["value"]:
+    def reveal_randomization_summary() -> None:
+        if randomization_revealed["value"]:
             return
-        medbeam_revealed["value"] = True
-        history.append(_medbeam_summary_html(chat_data))
+        randomization_revealed["value"] = True
+        history.append(_randomization_summary_html(chat_data))
         render()
 
     def on_gesture(_: widgets.Button) -> None:
         if double_click.register():
-            reveal_medbeam_summary()
+            reveal_randomization_summary()
 
     def submit(text: str) -> None:
         text = (text or "").strip()

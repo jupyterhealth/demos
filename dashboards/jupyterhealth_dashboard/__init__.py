@@ -12,8 +12,11 @@ packaged ``theme.css``. It contains no Exchange access, retrieval, decoding,
 normalization, or check.
 
 The practitioner report-delivery feed opens the supplied UC HTN Way 3.0 Box
-shared link in a new tab. The older locally vendored algorithm image remains
-packaged but is not used as the report destination.
+shared link in a new tab beside a selected Randomize control. The iCKM Advisor
+header keeps a hidden, keyboard-focusable double-click gesture; a successful
+double-click appends the scripted randomized-arm outcome once as a separate
+assistant message. The older locally vendored algorithm image remains packaged
+but is not used as the report destination.
 
 The ``build_dashboard`` export is lazy so tests and the notebook can import the
 dependency-free :mod:`jupyterhealth_dashboard.core` module without importing
